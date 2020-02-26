@@ -210,7 +210,7 @@ iris['ceros']=0
 del(iris['ceros'])
 
 # data=data.frame(x1=rep(1,10), x2=rep(2, 10))
-data = pd.DataFrame({'x1':np.ones(10), 'x2':np.repeat(2, 10)})
+data = pd.DataFrame({'x1':np.ones(10), 'x2':np.repeat(2, 10)}) #np.full(10, -1)
 # data2=data.frame(x3=rep(3,10), x4=rep(4, 10))
 data2 = pd.DataFrame({'x3':np.repeat(3, 10), 'x4':np.repeat(4, 10)})
 # data3=data.frame(x1=rep(1,10), x5=rep(5, 10))

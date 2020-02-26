@@ -204,6 +204,21 @@ X_new = SelectPercentile(chi2, k=2).fit_transform(X, y)
 X_new.shape
 
 
+#%% SelectFromModel
+from sklearn.svm import LinearSVC
+from sklearn.datasets import load_iris
+from sklearn.feature_selection import SelectFromModel
+X, y = load_iris(return_X_y=True)
+X.shape
+
+lsvc = LinearSVC(C=0.01, penalty="l1", dual=False).fit(X, y)
+model = SelectFromModel(lsvc, prefit=True)
+X_new = model.transform(X)
+X_new.shape
+
+#With SVMs and logistic-regression, the parameter C controls the sparsity: 
+#the smaller C the fewer features selected. With Lasso, the higher the alpha parameter, 
+#the fewer features selected.
 
 
 
@@ -1950,5 +1965,396 @@ multi_layer_regressor.fit(X_train, y_train)
 
 print('R2 score: {:.2f}'
       .format(multi_layer_regressor.score(X_test, y_test)))
+
+#%% LABEL PROPAGATION (SEMI-SUPERVISED)
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.semi_supervised import LabelSpreading
+from sklearn.datasets import make_circles
+
+# generate ring with inner box
+n_samples = 200
+X, y = make_circles(n_samples=n_samples, shuffle=False, noise=0)
+outer, inner = 0, 1
+labels = np.full(n_samples, -1.)
+labels[0] = outer
+labels[-1] = inner
+
+# #############################################################################
+# Learn with LabelSpreading
+label_spread = LabelSpreading(kernel='knn', alpha=0.9)
+label_spread.fit(X, labels)
+
+# #############################################################################
+# Plot output labels
+output_labels = label_spread.transduction_
+plt.figure(figsize=(8.5, 4))
+plt.subplot(1, 2, 1)
+plt.scatter(X[labels == outer, 0], X[labels == outer, 1], color='navy',
+            marker='s', lw=0, label="outer labeled", s=10)
+plt.scatter(X[labels == inner, 0], X[labels == inner, 1], color='c',
+            marker='s', lw=0, label='inner labeled', s=10)
+plt.scatter(X[labels == -1, 0], X[labels == -1, 1], color='darkorange',
+            marker='.', label='unlabeled')
+plt.legend(scatterpoints=1, shadow=False, loc='upper right')
+plt.title("Raw data (2 classes=outer and inner)")
+
+plt.subplot(1, 2, 2)
+output_label_array = np.asarray(output_labels)
+outer_numbers = np.where(output_label_array == outer)[0]
+inner_numbers = np.where(output_label_array == inner)[0]
+plt.scatter(X[outer_numbers, 0], X[outer_numbers, 1], color='navy',
+            marker='s', lw=0, s=10, label="outer learned")
+plt.scatter(X[inner_numbers, 0], X[inner_numbers, 1], color='c',
+            marker='s', lw=0, s=10, label="inner learned")
+plt.legend(scatterpoints=1, shadow=False, loc='upper right')
+plt.title("Labels learned with Label Spreading (KNN)")
+
+plt.subplots_adjust(left=0.07, bottom=0.07, right=0.93, top=0.92)
+plt.show()
+
+#%% ISOTONIC REGRESSION
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection
+
+from sklearn.linear_model import LinearRegression
+from sklearn.isotonic import IsotonicRegression
+from sklearn.utils import check_random_state
+
+n = 100
+x = np.arange(n)
+rs = check_random_state(0)
+y = rs.randint(-50, 50, size=(n,)) + 50. * np.log1p(np.arange(n))
+
+# #############################################################################
+# Fit IsotonicRegression and LinearRegression models
+
+ir = IsotonicRegression()
+
+y_ = ir.fit_transform(x, y)
+
+lr = LinearRegression()
+lr.fit(x[:, np.newaxis], y)  # x needs to be 2d for LinearRegression
+
+# #############################################################################
+# Plot result
+
+segments = [[[i, y[i]], [i, y_[i]]] for i in range(n)]
+lc = LineCollection(segments, zorder=0)
+lc.set_array(np.ones(len(y)))
+lc.set_linewidths(np.full(n, 0.5))
+
+fig = plt.figure()
+plt.plot(x, y, 'r.', markersize=12)
+plt.plot(x, y_, 'b.-', markersize=12)
+plt.plot(x, lr.predict(x[:, np.newaxis]), 'b-')
+#plt.gca().add_collection(lc)
+plt.legend(('Data', 'Isotonic Fit', 'Linear Fit'), loc='lower right')
+plt.title('Isotonic regression')
+plt.show()
+
+#%% Probability calibration
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import cm
+
+from sklearn.datasets import make_blobs
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import brier_score_loss
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import train_test_split
+
+
+n_samples = 50000
+n_bins = 3  # use 3 bins for calibration_curve as we have 3 clusters here
+
+# Generate 3 blobs with 2 classes where the second blob contains
+# half positive samples and half negative samples. Probability in this
+# blob is therefore 0.5.
+centers = [(-5, -5), (0, 0), (5, 5)]
+X, y = make_blobs(n_samples=n_samples, centers=centers, shuffle=False,
+                  random_state=42)
+
+y[:n_samples // 2] = 0
+y[n_samples // 2:] = 1
+sample_weight = np.random.RandomState(42).rand(y.shape[0])
+
+# split train, test for calibration
+X_train, X_test, y_train, y_test, sw_train, sw_test = \
+    train_test_split(X, y, sample_weight, test_size=0.9, random_state=42)
+
+# Gaussian Naive-Bayes with no calibration
+clf = GaussianNB()
+clf.fit(X_train, y_train)  # GaussianNB itself does not support sample-weights
+prob_pos_clf = clf.predict_proba(X_test)[:, 1]
+
+# Gaussian Naive-Bayes with isotonic calibration
+clf_isotonic = CalibratedClassifierCV(clf, cv=2, method='isotonic')
+clf_isotonic.fit(X_train, y_train, sw_train)
+prob_pos_isotonic = clf_isotonic.predict_proba(X_test)[:, 1]
+
+# Gaussian Naive-Bayes with sigmoid calibration
+clf_sigmoid = CalibratedClassifierCV(clf, cv=2, method='sigmoid')
+clf_sigmoid.fit(X_train, y_train, sw_train)
+prob_pos_sigmoid = clf_sigmoid.predict_proba(X_test)[:, 1]
+
+print("Brier scores: (the smaller the better)")
+
+clf_score = brier_score_loss(y_test, prob_pos_clf, sw_test)
+print("No calibration: %1.3f" % clf_score)
+
+clf_isotonic_score = brier_score_loss(y_test, prob_pos_isotonic, sw_test)
+print("With isotonic calibration: %1.3f" % clf_isotonic_score)
+
+clf_sigmoid_score = brier_score_loss(y_test, prob_pos_sigmoid, sw_test)
+print("With sigmoid calibration: %1.3f" % clf_sigmoid_score)
+
+# #############################################################################
+# Plot the data and the predicted probabilities
+plt.figure()
+y_unique = np.unique(y)
+colors = cm.rainbow(np.linspace(0.0, 1.0, y_unique.size))
+for this_y, color in zip(y_unique, colors):
+    this_X = X_train[y_train == this_y]
+    this_sw = sw_train[y_train == this_y]
+    plt.scatter(this_X[:, 0], this_X[:, 1], s=this_sw * 50,
+                c=color[np.newaxis, :],
+                alpha=0.5, edgecolor='k',
+                label="Class %s" % this_y)
+plt.legend(loc="best")
+plt.title("Data")
+
+plt.figure()
+order = np.lexsort((prob_pos_clf, ))
+plt.plot(prob_pos_clf[order], 'r', label='No calibration (%1.3f)' % clf_score)
+plt.plot(prob_pos_isotonic[order], 'g', linewidth=3,
+         label='Isotonic calibration (%1.3f)' % clf_isotonic_score)
+plt.plot(prob_pos_sigmoid[order], 'b', linewidth=3,
+         label='Sigmoid calibration (%1.3f)' % clf_sigmoid_score)
+plt.plot(np.linspace(0, y_test.size, 51)[1::2],
+         y_test[order].reshape(25, -1).mean(1),
+         'k', linewidth=3, label=r'Empirical')
+plt.ylim([-0.05, 1.05])
+plt.xlabel("Instances sorted according to predicted probability "
+           "(uncalibrated GNB)")
+plt.ylabel("P(y=1)")
+plt.legend(loc="upper left")
+plt.title("Gaussian naive Bayes probabilities")
+
+plt.show()
+
+
+#%% PROBABILITY CALIBRATION 2
+
+import matplotlib.pyplot as plt
+
+from sklearn import datasets
+from sklearn.naive_bayes import GaussianNB
+from sklearn.svm import LinearSVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (brier_score_loss, precision_score, recall_score,
+                             f1_score)
+from sklearn.calibration import CalibratedClassifierCV, calibration_curve
+from sklearn.model_selection import train_test_split
+
+
+# Create dataset of classification task with many redundant and few
+# informative features
+X, y = datasets.make_classification(n_samples=100000, n_features=20,
+                                    n_informative=2, n_redundant=10,
+                                    random_state=42)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.99,
+                                                    random_state=42)
+
+
+def plot_calibration_curve(est, name, fig_index):
+    """Plot calibration curve for est w/o and with calibration. """
+    # Calibrated with isotonic calibration
+    isotonic = CalibratedClassifierCV(est, cv=2, method='isotonic')
+
+    # Calibrated with sigmoid calibration
+    sigmoid = CalibratedClassifierCV(est, cv=2, method='sigmoid')
+
+    # Logistic regression with no calibration as baseline
+    lr = LogisticRegression(C=1.)
+
+    fig = plt.figure(fig_index, figsize=(10, 10))
+    ax1 = plt.subplot2grid((3, 1), (0, 0), rowspan=2)
+    ax2 = plt.subplot2grid((3, 1), (2, 0))
+
+    ax1.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
+    for clf, name in [(lr, 'Logistic'),
+                      (est, name),
+                      (isotonic, name + ' + Isotonic'),
+                      (sigmoid, name + ' + Sigmoid')]:
+        clf.fit(X_train, y_train)
+        y_pred = clf.predict(X_test)
+        if hasattr(clf, "predict_proba"):
+            prob_pos = clf.predict_proba(X_test)[:, 1]
+        else:  # use decision function
+            prob_pos = clf.decision_function(X_test)
+            prob_pos = \
+                (prob_pos - prob_pos.min()) / (prob_pos.max() - prob_pos.min())
+
+        clf_score = brier_score_loss(y_test, prob_pos, pos_label=y.max())
+        print("%s:" % name)
+        print("\tBrier: %1.3f" % (clf_score))
+        print("\tPrecision: %1.3f" % precision_score(y_test, y_pred))
+        print("\tRecall: %1.3f" % recall_score(y_test, y_pred))
+        print("\tF1: %1.3f\n" % f1_score(y_test, y_pred))
+
+        fraction_of_positives, mean_predicted_value = \
+            calibration_curve(y_test, prob_pos, n_bins=10)
+
+        ax1.plot(mean_predicted_value, fraction_of_positives, "s-",
+                 label="%s (%1.3f)" % (name, clf_score))
+
+        ax2.hist(prob_pos, range=(0, 1), bins=10, label=name,
+                 histtype="step", lw=2)
+
+    ax1.set_ylabel("Fraction of positives")
+    ax1.set_ylim([-0.05, 1.05])
+    ax1.legend(loc="lower right")
+    ax1.set_title('Calibration plots  (reliability curve)')
+
+    ax2.set_xlabel("Mean predicted value")
+    ax2.set_ylabel("Count")
+    ax2.legend(loc="upper center", ncol=2)
+
+    plt.tight_layout()
+
+# Plot calibration curve for Gaussian Naive Bayes
+plot_calibration_curve(est=GaussianNB(), name="Naive Bayes", fig_index=1)
+
+# Plot calibration curve for Linear SVC
+plot_calibration_curve(LinearSVC(max_iter=10000), "SVC", 2)
+
+plt.show()
+
+
+#%% SUPERVISED NEURAL NETWORKS CLASSIFICATION
+
+
+from sklearn.neural_network import MLPClassifier
+X = [[0., 0.], [1., 1.]]
+y = [0, 1]
+clf = MLPClassifier(solver='lbfgs', alpha=1e-5,
+                    hidden_layer_sizes=(5, 2), random_state=1)
+
+clf.fit(X, y)
+clf.predict([[2., 2.], [-1., -2.]])
+clf.predict_proba([[2., 2.], [1., 2.]])
+
+#Multi label classification
+X = [[0., 0.], [1., 1.]]
+y = [[0, 1], [1, 1]]
+clf = MLPClassifier(solver='lbfgs', alpha=1e-5,
+                    hidden_layer_sizes=(15,), random_state=1)
+
+clf.fit(X, y)
+clf.predict([[1., 2.]])
+clf.predict([[0., 0.]])
+
+#%% NEURAL NETWORK CLASSIFICATION WITH REGULARIZATION L2
+import numpy as np
+from matplotlib import pyplot as plt
+from matplotlib.colors import ListedColormap
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.datasets import make_moons, make_circles, make_classification
+from sklearn.neural_network import MLPClassifier
+
+h = .02  # step size in the mesh
+
+alphas = np.logspace(-5, 3, 5)
+names = ['alpha ' + str(i) for i in alphas]
+
+classifiers = []
+for i in alphas:
+    classifiers.append(MLPClassifier(solver='lbfgs', alpha=i, random_state=1,
+                                     hidden_layer_sizes=[100, 100]))
+
+X, y = make_classification(n_features=2, n_redundant=0, n_informative=2,
+                           random_state=0, n_clusters_per_class=1)
+rng = np.random.RandomState(2)
+X += 2 * rng.uniform(size=X.shape)
+linearly_separable = (X, y)
+
+datasets = [make_moons(noise=0.3, random_state=0),
+            make_circles(noise=0.2, factor=0.5, random_state=1),
+            linearly_separable]
+
+figure = plt.figure(figsize=(17, 9))
+i = 1
+# iterate over datasets
+for X, y in datasets:
+    # preprocess dataset, split into training and test part
+    X = StandardScaler().fit_transform(X)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.4)
+
+    x_min, x_max = X[:, 0].min() - .5, X[:, 0].max() + .5
+    y_min, y_max = X[:, 1].min() - .5, X[:, 1].max() + .5
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                         np.arange(y_min, y_max, h))
+
+    # just plot the dataset first
+    cm = plt.cm.RdBu
+    cm_bright = ListedColormap(['#FF0000', '#0000FF'])
+    ax = plt.subplot(len(datasets), len(classifiers) + 1, i)
+    # Plot the training points
+    ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, cmap=cm_bright)
+    # and testing points
+    ax.scatter(X_test[:, 0], X_test[:, 1], c=y_test, cmap=cm_bright, alpha=0.6)
+    ax.set_xlim(xx.min(), xx.max())
+    ax.set_ylim(yy.min(), yy.max())
+    ax.set_xticks(())
+    ax.set_yticks(())
+    i += 1
+
+    # iterate over classifiers
+    for name, clf in zip(names, classifiers):
+        ax = plt.subplot(len(datasets), len(classifiers) + 1, i)
+        clf.fit(X_train, y_train)
+        score = clf.score(X_test, y_test)
+
+        # Plot the decision boundary. For that, we will assign a color to each
+        # point in the mesh [x_min, x_max]x[y_min, y_max].
+        if hasattr(clf, "decision_function"):
+            Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
+        else:
+            Z = clf.predict_proba(np.c_[xx.ravel(), yy.ravel()])[:, 1]
+
+        # Put the result into a color plot
+        Z = Z.reshape(xx.shape)
+        ax.contourf(xx, yy, Z, cmap=cm, alpha=.8)
+
+        # Plot also the training points
+        ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, cmap=cm_bright,
+                   edgecolors='black', s=25)
+        # and testing points
+        ax.scatter(X_test[:, 0], X_test[:, 1], c=y_test, cmap=cm_bright,
+                   alpha=0.6, edgecolors='black', s=25)
+
+        ax.set_xlim(xx.min(), xx.max())
+        ax.set_ylim(yy.min(), yy.max())
+        ax.set_xticks(())
+        ax.set_yticks(())
+        ax.set_title(name)
+        ax.text(xx.max() - .3, yy.min() + .3, ('%.2f' % score).lstrip('0'),
+                size=15, horizontalalignment='right')
+        i += 1
+
+figure.subplots_adjust(left=.02, right=.98)
+plt.show()
+
+
+
+
+
 
 
