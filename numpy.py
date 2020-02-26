@@ -42,6 +42,3 @@ np.random.uniform(5,10, size=(5,3))
 np.set_printoptions(precision=3) #Limitar numero de decimales, en siguientes lineas
 
 
-
-prueba
-prueba2
