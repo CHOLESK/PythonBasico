@@ -2288,7 +2288,9 @@ linearly_separable = (X, y)
 datasets = [make_moons(noise=0.3, random_state=0),
             make_circles(noise=0.2, factor=0.5, random_state=1),
             linearly_separable]
-
+plt.scatter(datasets[0][0][:,0], datasets[0][0][:,1], c=datasets[2][1])
+plt.scatter(datasets[1][0][:,0], datasets[1][0][:,1], c=datasets[2][1])
+plt.scatter(datasets[2][0][:,0], datasets[2][0][:,1], c=datasets[2][1])
 figure = plt.figure(figsize=(17, 9))
 i = 1
 # iterate over datasets
