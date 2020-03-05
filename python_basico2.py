@@ -123,6 +123,8 @@ iris["SepalLength"].std()
 np.quantile(iris["SepalLength"],0.35)
 # cor(iris[,1:4])
 iris[['SepalLength', 'SepalWidth', 'PetalLength', 'PetalWidth']].corr(method="pearson")
+#unique(iris[,5])
+np.unique(iris['Species'])
 
 
 # which(data$Sepal.Length<6)
