@@ -2597,21 +2597,480 @@ plt.title("Unevenly Sized Blobs")
 
 plt.show()
 
+#%% Mini Batch KMEANS
+import time
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.cluster import MiniBatchKMeans, KMeans
+from sklearn.metrics.pairwise import pairwise_distances_argmin
+from sklearn.datasets import make_blobs
+
+# #############################################################################
+# Generate sample data
+np.random.seed(0)
+
+batch_size = 45
+centers = [[1, 1], [-1, -1], [1, -1]]
+n_clusters = len(centers)
+X, labels_true = make_blobs(n_samples=3000, centers=centers, cluster_std=0.7)
+
+# #############################################################################
+# Compute clustering with Means
+
+k_means = KMeans(init='k-means++', n_clusters=3, n_init=10)
+t0 = time.time()
+k_means.fit(X)
+t_batch = time.time() - t0
+
+# #############################################################################
+# Compute clustering with MiniBatchKMeans
+
+mbk = MiniBatchKMeans(init='k-means++', n_clusters=3, batch_size=batch_size,
+                      n_init=10, max_no_improvement=10, verbose=0)
+t0 = time.time()
+mbk.fit(X)
+t_mini_batch = time.time() - t0
+
+# #############################################################################
+# Plot result
+
+fig = plt.figure(figsize=(8, 3))
+fig.subplots_adjust(left=0.02, right=0.98, bottom=0.05, top=0.9)
+colors = ['#4EACC5', '#FF9C34', '#4E9A06']
+
+# We want to have the same colors for the same cluster from the
+# MiniBatchKMeans and the KMeans algorithm. Let's pair the cluster centers per
+# closest one.
+k_means_cluster_centers = k_means.cluster_centers_
+order = pairwise_distances_argmin(k_means.cluster_centers_,
+                                  mbk.cluster_centers_)
+mbk_means_cluster_centers = mbk.cluster_centers_[order]
+
+k_means_labels = pairwise_distances_argmin(X, k_means_cluster_centers)
+mbk_means_labels = pairwise_distances_argmin(X, mbk_means_cluster_centers)
+
+# KMeans
+ax = fig.add_subplot(1, 3, 1)
+for k, col in zip(range(n_clusters), colors):
+    my_members = k_means_labels == k
+    cluster_center = k_means_cluster_centers[k]
+    ax.plot(X[my_members, 0], X[my_members, 1], 'w',
+            markerfacecolor=col, marker='.')
+    ax.plot(cluster_center[0], cluster_center[1], 'o', markerfacecolor=col,
+            markeredgecolor='k', markersize=6)
+ax.set_title('KMeans')
+ax.set_xticks(())
+ax.set_yticks(())
+plt.text(-3.5, 1.8,  'train time: %.2fs\ninertia: %f' % (
+    t_batch, k_means.inertia_))
+
+# MiniBatchKMeans
+ax = fig.add_subplot(1, 3, 2)
+for k, col in zip(range(n_clusters), colors):
+    my_members = mbk_means_labels == k
+    cluster_center = mbk_means_cluster_centers[k]
+    ax.plot(X[my_members, 0], X[my_members, 1], 'w',
+            markerfacecolor=col, marker='.')
+    ax.plot(cluster_center[0], cluster_center[1], 'o', markerfacecolor=col,
+            markeredgecolor='k', markersize=6)
+ax.set_title('MiniBatchKMeans')
+ax.set_xticks(())
+ax.set_yticks(())
+plt.text(-3.5, 1.8, 'train time: %.2fs\ninertia: %f' %
+         (t_mini_batch, mbk.inertia_))
+
+# Initialise the different array to all False
+different = (mbk_means_labels == 4)
+ax = fig.add_subplot(1, 3, 3)
+
+for k in range(n_clusters):
+    different += ((k_means_labels == k) != (mbk_means_labels == k))
+
+identic = np.logical_not(different)
+ax.plot(X[identic, 0], X[identic, 1], 'w',
+        markerfacecolor='#bbbbbb', marker='.')
+ax.plot(X[different, 0], X[different, 1], 'w',
+        markerfacecolor='m', marker='.')
+ax.set_title('Difference')
+ax.set_xticks(())
+ax.set_yticks(())
+
+plt.show()
+
+#%% AFFINITY PROPAGATION
+
+from sklearn.cluster import AffinityPropagation
+from sklearn import metrics
+from sklearn.datasets import make_blobs
+
+# #############################################################################
+# Generate sample data
+centers = [[1, 1], [-1, -1], [1, -1]]
+X, labels_true = make_blobs(n_samples=300, centers=centers, cluster_std=0.5,
+                            random_state=0)
+
+# #############################################################################
+# Compute Affinity Propagation
+af = AffinityPropagation(preference=-50).fit(X)
+cluster_centers_indices = af.cluster_centers_indices_
+labels = af.labels_
+
+n_clusters_ = len(cluster_centers_indices)
+
+print('Estimated number of clusters: %d' % n_clusters_)
+print("Homogeneity: %0.3f" % metrics.homogeneity_score(labels_true, labels))
+print("Completeness: %0.3f" % metrics.completeness_score(labels_true, labels))
+print("V-measure: %0.3f" % metrics.v_measure_score(labels_true, labels))
+print("Adjusted Rand Index: %0.3f"
+      % metrics.adjusted_rand_score(labels_true, labels))
+print("Adjusted Mutual Information: %0.3f"
+      % metrics.adjusted_mutual_info_score(labels_true, labels))
+print("Silhouette Coefficient: %0.3f"
+      % metrics.silhouette_score(X, labels, metric='sqeuclidean'))
+
+# #############################################################################
+# Plot result
+import matplotlib.pyplot as plt
+from itertools import cycle
+
+plt.close('all')
+plt.figure(1)
+plt.clf()
+
+colors = cycle('bgrcmykbgrcmykbgrcmykbgrcmyk')
+for k, col in zip(range(n_clusters_), colors):
+    class_members = labels == k
+    cluster_center = X[cluster_centers_indices[k]]
+    plt.plot(X[class_members, 0], X[class_members, 1], col + '.')
+    plt.plot(cluster_center[0], cluster_center[1], 'o', markerfacecolor=col,
+             markeredgecolor='k', markersize=14)
+    for x in X[class_members]:
+        plt.plot([cluster_center[0], x[0]], [cluster_center[1], x[1]], col)
+
+plt.title('Estimated number of clusters: %d' % n_clusters_)
+plt.show()
 
 
+#%% MEANSHIFT
+
+import numpy as np
+from sklearn.cluster import MeanShift, estimate_bandwidth
+from sklearn.datasets import make_blobs
+
+# #############################################################################
+# Generate sample data
+centers = [[1, 1], [-1, -1], [1, -1]]
+X, _ = make_blobs(n_samples=10000, centers=centers, cluster_std=0.6)
+
+# #############################################################################
+# Compute clustering with MeanShift
+
+# The following bandwidth can be automatically detected using
+bandwidth = estimate_bandwidth(X, quantile=0.2, n_samples=500)
+
+ms = MeanShift(bandwidth=bandwidth, bin_seeding=True)
+ms.fit(X)
+labels = ms.labels_
+cluster_centers = ms.cluster_centers_
+
+labels_unique = np.unique(labels)
+n_clusters_ = len(labels_unique)
+
+print("number of estimated clusters : %d" % n_clusters_)
+
+# #############################################################################
+# Plot result
+import matplotlib.pyplot as plt
+from itertools import cycle
+
+plt.figure(1)
+plt.clf()
+
+colors = cycle('bgrcmykbgrcmykbgrcmykbgrcmyk')
+for k, col in zip(range(n_clusters_), colors):
+    my_members = labels == k
+    cluster_center = cluster_centers[k]
+    plt.plot(X[my_members, 0], X[my_members, 1], col + '.')
+    plt.plot(cluster_center[0], cluster_center[1], 'o', markerfacecolor=col,
+             markeredgecolor='k', markersize=14)
+plt.title('Estimated number of clusters: %d' % n_clusters_)
+plt.show()
+
+#%% HIERARCHICAL AGGLOMERATIVE CLUSTERING
+
+import time
+import warnings
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn import cluster, datasets
+from sklearn.preprocessing import StandardScaler
+from itertools import cycle, islice
+
+n_samples = 1500
+noisy_circles = datasets.make_circles(n_samples=n_samples, factor=.5,
+                                      noise=.05)
+noisy_moons = datasets.make_moons(n_samples=n_samples, noise=.05)
+blobs = datasets.make_blobs(n_samples=n_samples, random_state=8)
+no_structure = np.random.rand(n_samples, 2), None
+
+# Anisotropicly distributed data
+random_state = 170
+X, y = datasets.make_blobs(n_samples=n_samples, random_state=random_state)
+plt.scatter(X[:,0], X[:,1], c=y)
+transformation = [[0.6, -0.6], [-0.4, 0.8]]
+X_aniso = np.dot(X, transformation)
+plt.scatter(X_aniso[:,0], X_aniso[:,1], c=y)
+aniso = (X_aniso, y)
+
+# blobs with varied variances
+varied = datasets.make_blobs(n_samples=n_samples,
+                             cluster_std=[1.0, 2.5, 0.5],
+                             random_state=random_state)
+
+plt.figure(figsize=(9 * 1.3 + 2, 14.5))
+plt.subplots_adjust(left=.02, right=.98, bottom=.001, top=.96, wspace=.05,
+                    hspace=.01)
+
+plot_num = 1
+
+default_base = {'n_neighbors': 10,
+                'n_clusters': 3}
+
+datasets = [
+    (noisy_circles, {'n_clusters': 2}),
+    (noisy_moons, {'n_clusters': 2}),
+    (varied, {'n_neighbors': 2}),
+    (aniso, {'n_neighbors': 2}),
+    (blobs, {}),
+    (no_structure, {})]
+
+for i_dataset, (dataset, algo_params) in enumerate(datasets):
+    # update parameters with dataset-specific values
+    params = default_base.copy()
+    params.update(algo_params)
+    print(params)
+
+    X, y = dataset
+
+    # normalize dataset for easier parameter selection
+    X = StandardScaler().fit_transform(X)
+
+    # ============
+    # Create cluster objects
+    # ============
+    ward = cluster.AgglomerativeClustering(
+        n_clusters=params['n_clusters'], linkage='ward')
+    complete = cluster.AgglomerativeClustering(
+        n_clusters=params['n_clusters'], linkage='complete')
+    average = cluster.AgglomerativeClustering(
+        n_clusters=params['n_clusters'], linkage='average')
+    single = cluster.AgglomerativeClustering(
+        n_clusters=params['n_clusters'], linkage='single')
+
+    clustering_algorithms = (
+        ('Single Linkage', single),
+        ('Average Linkage', average),
+        ('Complete Linkage', complete),
+        ('Ward Linkage', ward),
+    )
+
+    for name, algorithm in clustering_algorithms:
+        t0 = time.time()
+
+        # catch warnings related to kneighbors_graph
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="the number of connected components of the " +
+                "connectivity matrix is [0-9]{1,2}" +
+                " > 1. Completing it to avoid stopping the tree early.",
+                category=UserWarning)
+            algorithm.fit(X)
+
+        t1 = time.time()
+        if hasattr(algorithm, 'labels_'):
+            y_pred = algorithm.labels_.astype(np.int)
+        else:
+            y_pred = algorithm.predict(X)
+
+        plt.subplot(len(datasets), len(clustering_algorithms), plot_num)
+        if i_dataset == 0:
+            plt.title(name, size=18)
+
+        colors = np.array(list(islice(cycle(['#377eb8', '#ff7f00', '#4daf4a',
+                                             '#f781bf', '#a65628', '#984ea3',
+                                             '#999999', '#e41a1c', '#dede00']),
+                                      int(max(y_pred) + 1))))
+        plt.scatter(X[:, 0], X[:, 1], s=10, color=colors[y_pred])
+
+        plt.xlim(-2.5, 2.5)
+        plt.ylim(-2.5, 2.5)
+        plt.xticks(())
+        plt.yticks(())
+        plt.text(.99, .01, ('%.2fs' % (t1 - t0)).lstrip('0'),
+                 transform=plt.gca().transAxes, size=15,
+                 horizontalalignment='right')
+        plot_num += 1
+
+plt.show()
+
+#%% DBScan
+
+import numpy as np
+
+from sklearn.cluster import DBSCAN
+from sklearn import metrics
+from sklearn.datasets import make_blobs
+from sklearn.preprocessing import StandardScaler
 
 
+# #############################################################################
+# Generate sample data
+centers = [[1, 1], [-1, -1], [1, -1]]
+X, labels_true = make_blobs(n_samples=750, centers=centers, cluster_std=0.4,
+                            random_state=0)
+
+X = StandardScaler().fit_transform(X)
+
+# #############################################################################
+# Compute DBSCAN
+db = DBSCAN(eps=0.3, min_samples=10).fit(X)
+core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
+core_samples_mask[db.core_sample_indices_] = True
+labels = db.labels_
+
+# Number of clusters in labels, ignoring noise if present.
+n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
+n_noise_ = list(labels).count(-1)
+
+print('Estimated number of clusters: %d' % n_clusters_)
+print('Estimated number of noise points: %d' % n_noise_)
+print("Homogeneity: %0.3f" % metrics.homogeneity_score(labels_true, labels))
+print("Completeness: %0.3f" % metrics.completeness_score(labels_true, labels))
+print("V-measure: %0.3f" % metrics.v_measure_score(labels_true, labels))
+print("Adjusted Rand Index: %0.3f"
+      % metrics.adjusted_rand_score(labels_true, labels))
+print("Adjusted Mutual Information: %0.3f"
+      % metrics.adjusted_mutual_info_score(labels_true, labels))
+print("Silhouette Coefficient: %0.3f"
+      % metrics.silhouette_score(X, labels))
+
+# #############################################################################
+# Plot result
+import matplotlib.pyplot as plt
+
+# Black removed and is used for noise instead.
+unique_labels = set(labels)
+colors = [plt.cm.Spectral(each)
+          for each in np.linspace(0, 1, len(unique_labels))]
+for k, col in zip(unique_labels, colors):
+    if k == -1:
+        # Black used for noise.
+        col = [0, 0, 0, 1]
+
+    class_member_mask = (labels == k)
+
+    xy = X[class_member_mask & core_samples_mask]
+    plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=tuple(col),
+             markeredgecolor='k', markersize=14)
+
+    xy = X[class_member_mask & ~core_samples_mask]
+    plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=tuple(col),
+             markeredgecolor='k', markersize=6)
+
+plt.title('Estimated number of clusters: %d' % n_clusters_)
+plt.show()
+
+#Representacion facil
+plt.scatter(X[:,0], X[:,1], c=labels_true)
+plt.scatter(X[:,0], X[:,1], c=labels)
 
 
+#%% OPTICS
+from sklearn.cluster import OPTICS, cluster_optics_dbscan
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
+import numpy as np
 
+# Generate sample data
 
+np.random.seed(0)
+n_points_per_cluster = 250
 
+C1 = [-5, -2] + .8 * np.random.randn(n_points_per_cluster, 2)
+C2 = [4, -1] + .1 * np.random.randn(n_points_per_cluster, 2)
+C3 = [1, -2] + .2 * np.random.randn(n_points_per_cluster, 2)
+C4 = [-2, 3] + .3 * np.random.randn(n_points_per_cluster, 2)
+C5 = [3, -2] + 1.6 * np.random.randn(n_points_per_cluster, 2)
+C6 = [5, 6] + 2 * np.random.randn(n_points_per_cluster, 2)
+X = np.vstack((C1, C2, C3, C4, C5, C6))
+plt.scatter(X[:,0], X[:,1])
+clust = OPTICS(min_samples=50, xi=.05, min_cluster_size=.05)
 
+# Run the fit
+clust.fit(X)
 
+labels_050 = cluster_optics_dbscan(reachability=clust.reachability_,
+                                   core_distances=clust.core_distances_,
+                                   ordering=clust.ordering_, eps=0.5)
+labels_200 = cluster_optics_dbscan(reachability=clust.reachability_,
+                                   core_distances=clust.core_distances_,
+                                   ordering=clust.ordering_, eps=2)
 
+space = np.arange(len(X))
+reachability = clust.reachability_[clust.ordering_]
+labels = clust.labels_[clust.ordering_]
 
+#PLOT
+plt.figure(figsize=(10, 7))
+G = gridspec.GridSpec(2, 3)
+ax1 = plt.subplot(G[0, :])
+ax2 = plt.subplot(G[1, 0])
+ax3 = plt.subplot(G[1, 1])
+ax4 = plt.subplot(G[1, 2])
 
+# Reachability plot
+colors = ['g.', 'r.', 'b.', 'y.', 'c.']
+for klass, color in zip(range(0, 5), colors):
+    Xk = space[labels == klass]
+    Rk = reachability[labels == klass]
+    ax1.plot(Xk, Rk, color, alpha=0.3)
+ax1.plot(space[labels == -1], reachability[labels == -1], 'k.', alpha=0.3)
+ax1.plot(space, np.full_like(space, 2., dtype=float), 'k-', alpha=0.5)
+ax1.plot(space, np.full_like(space, 0.5, dtype=float), 'k-.', alpha=0.5)
+ax1.set_ylabel('Reachability (epsilon distance)')
+ax1.set_title('Reachability Plot')
 
+# OPTICS
+colors = ['g.', 'r.', 'b.', 'y.', 'c.']
+for klass, color in zip(range(0, 5), colors):
+    Xk = X[clust.labels_ == klass]
+    ax2.plot(Xk[:, 0], Xk[:, 1], color, alpha=0.3)
+ax2.plot(X[clust.labels_ == -1, 0], X[clust.labels_ == -1, 1], 'k+', alpha=0.1)
+ax2.set_title('Automatic Clustering\nOPTICS')
+
+# DBSCAN at 0.5
+colors = ['g', 'greenyellow', 'olive', 'r', 'b', 'c']
+for klass, color in zip(range(0, 6), colors):
+    Xk = X[labels_050 == klass]
+    ax3.plot(Xk[:, 0], Xk[:, 1], color, alpha=0.3, marker='.')
+ax3.plot(X[labels_050 == -1, 0], X[labels_050 == -1, 1], 'k+', alpha=0.1)
+ax3.set_title('Clustering at 0.5 epsilon cut\nDBSCAN')
+
+# DBSCAN at 2.
+colors = ['g.', 'm.', 'y.', 'c.']
+for klass, color in zip(range(0, 4), colors):
+    Xk = X[labels_200 == klass]
+    ax4.plot(Xk[:, 0], Xk[:, 1], color, alpha=0.3)
+ax4.plot(X[labels_200 == -1, 0], X[labels_200 == -1, 1], 'k+', alpha=0.1)
+ax4.set_title('Clustering at 2.0 epsilon cut\nDBSCAN')
+
+plt.tight_layout()
+plt.show()
 
 
 
