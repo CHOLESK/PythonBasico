@@ -304,12 +304,35 @@ os.path.isdir('Favorites')
 
 
 
+#%% MATPLOTLIB
+import matplotib.pyplot as plt
+
+plt.plot(df['Mes'], df['data science'], label='data science')
+plt.plot(df['Mes'], df['machine learning'], label='machine learning')
+plt.plot(df['Mes'], df['deep learning'], label='deep learning')
+plt.xlabel('Date')
+plt.ylabel('Popularity')
+plt.title('Popularity of AI terms by date')
+plt.grid(True)
+plt.legend()
+plt.text(x='2010-01-01', y=80, s=r'$\lambda=1, r^2=0.8$') #Coordinates use the same units as the graph
+plt.annotate('Notice something?', xy=('2014-01-01', 30), xytext=('2006-01-01', 50), arrowprops={'facecolor':'red', 'shrink':0.05})
+
+fig, axes = plt.subplots(2,2)
+axes[0, 0].hist(df['data science'])
+axes[0, 1].scatter(df['Mes'], df['data science'])
+axes[1, 0].plot(df['Mes'], df['machine learning'])
+axes[1, 1].plot(df['Mes'], df['deep learning'])
+
+plt.scatter(df['data science'], df['machine learning'])
+
+plt.bar(df['Mes'], df['machine learning'], width=20)
+
+plt.hist(df['deep learning'], bins=15)
 
 
+#%% SEABORN
 
-
-
-
-
-
-
+import seaborn as sns
+sns.set()
+sns.scatterplot(df['Mes'], df['data science'])
