@@ -42,10 +42,12 @@ a[1]
 a[1:3]
 # runif(n = 4, min = 0, max = 10)
 import random
-random.sample(range(10), 4)
+np.random.shuffle(a)
+np.random.normal(0, 1, 5)
+np.random.rand(8)
+np.random.randint(2, 5, 7)
 # sample(10)
-from random import sample 
-sample(population=range(10), k=10)
+random.sample(range(10), 4)
 #seq(0,10,length.out = 4)
 np.linspace(0,10,4)
 # a[1]=abs(-5)
