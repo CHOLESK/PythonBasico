@@ -81,8 +81,7 @@ df.unos
 # data(iris)
 from sklearn.datasets import load_iris
 iris = load_iris()
-import sklearn
-iris=sklearn.datasets.load_iris()
+iris=load_iris()
 datos=pd.DataFrame(iris.data)
 datos['species']=iris.target
 datos.columns=['SepalLength', 'SepalWidth', 'PetalLength', 'PetalWidth', 'Species']
@@ -94,8 +93,9 @@ datos["Species"]=datos["Species"].replace(2, iris.target_names[2])
 
 # aux=data.frame(iris)
 iris=datos.copy()
-# str(iris)
 
+
+pd.set_option('display.max_columns', len(train_oh))
 # table(iris$Sepal.Length, iris$Sepal.Width)
 from collections import Counter
 Counter(datos.Species)
@@ -107,6 +107,8 @@ iris.tail()
 iris.describe()
 # dim(iris)
 iris.shape()
+# str(iris)
+iris.info()
 # sum((iris$Sepal.Length))
 iris["SepalLength"].sum()
 # min(iris$Sepal.Length)
@@ -154,58 +156,25 @@ variable='SepalLength'
 variable in iris.columns #True
 iris.iloc[:,iris.columns==variable]
 
-# library(dplyr)
-import dplython as dp
-iris = dp.DplyFrame(iris)
-from dplython import (DplyFrame, X, diamonds, select, sift,
-  sample_n, sample_frac, head, arrange, mutate, group_by,
-  summarize, DelayFunction)
-# data(iris)
-# data=iris %>% 
-# select(Petal.Length, Petal.Width, Sepal.Length, Sepal.Width, Species)
-iris >> dp.select(X.Species) >> dp.head()
+#Libreria dfply
+from dfply import *
 
-iris[['Species', 'PetalLength']]
-iris.drop('SepalLength', axis=1) #quitar esa columna
-iris.drop(5, axis=0) #quitar la sexta fila
-# data=iris %>% 
-# filter(Petal.Length>1 & Petal.Length<100)
-iris >> dp.sift(X.PetalLength>5)
-
-iris[(iris['PetalLength']>5) & (iris['PetalLength']<6)]
-# data=iris %>% 
-# dplyr::group_by(Species) %>%
-# summarise(media=mean(Petal.Length)) 
-iris >> dp.group_by(X.Species) >> dp.summarize(media=X.PetalLength.mean())
-
-iris.groupby(['Species'])['PetalLength'].agg(['mean', 'sum', 'count'])
-iris.groupby(['Species'])['PetalLength'].agg({'var1':'mean', 'var2':'sum', 'var3':'count'})
-iris.groupby(['Species'])['PetalLength'].agg({'var1':['mean', 'sum']})
-aggregations = {
-    'dsuma':'sum',
-    
-}
-import math
-iris.groupby(['Species'])['PetalLength'].agg({'dsuma':'sum', 'otro': lambda x: math.sqrt(x.mean()) - 1})
-# data=iris %>% 
-# mutate(total=Sepal.Length+Petal.Length, otro=ifelse(Petal.Length>2, "grande", "pequeÃ±o"))
-iris >> dp.mutate(redondeado=X.PetalLength.round(), redondeado2=X.SepalLength.round())
-
-iris.assign(redondeado = lambda x: x.PetalLength.round(), redondeado2 = lambda x: x.SepalLength.round())
+iris >> select(X.PetalLength, X.PetalWidth)
+iris >> drop (X.Species)
+iris >> mask (X.Species=="setosa") #filter
+iris >> arrange(X.PetalLength, ascending=False)
+iris >> mutate (PetalNew=X.PetalLength*X.PetalWidth, Otra=1)
+iris >> group_by(X.Species) >> summarize (media=X.PetalLength.mean())
 
 #ifelse(y==0, 0, 1)
 np.where((y == 0), 0, 1)
 # data=iris %>% 
 # distinct(Species, Sepal.Length, .keep_all = T)
-iris >> dp.distinct(X.SepalLength)
-
 iris.drop_duplicates()
 iris.drop_duplicates(subset='PetalLength')
 # #ordenando
 # data=iris %>% 
 # arrange(Sepal.Length, Sepal.Width)
-iris >> dp.arrange(X.PetalLength)
-
 iris.sort_values("PetalLength", ascending=False)
 # data$ceros=0
 iris['ceros']=0
@@ -229,12 +198,27 @@ total3=pd.concat([data, data3], axis=1)
 # total4=rbind(data, data2)
 total4=pd.concat([data, data3], axis=0)
 total4=data.append(data3)
+
+V = [1,2,3,4,5,6 ]
+Y = [7,8,9,10,11,12]
+W=np.r_[V[0:2],Y[0],V[3],Y[1:3],V[4:],Y[4:]]
+X=np.c_[V, Y]
+np.r_[V, Y, W]
+np.c_[X, V, Y]
+X.ravel()
+a = np.array([[1, 2], [3, 4]])
+b = np.array([[5, 6]])
+np.concatenate((a, b), axis=0)
+
+
 # library(tidyverse)
 # data(iris)
 # data=iris %>% distinct(Sepal.Length, Species, .keep_all = T)
 iris.duplicated()
 iris.drop_duplicates()
 iris = iris.drop_duplicates(iris.columns[~iris.columns.isin(['SepalLength', 'Species'])], keep='first')
+
+
 
 # data=spread(data, key=Species, value=Sepal.Length)
 spread=pd.pivot_table(iris, values='SepalLength', index=['SepalWidth', 'PetalLength', 'PetalWidth'], columns='Species').reset_index()
