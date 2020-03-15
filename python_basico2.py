@@ -136,8 +136,11 @@ set(iris['Species'])
 np.where(iris["SepalLength"]<6)
 # data[1,4]=0.3
 iris.iloc[0, 3]=0.3
+iris.values[0,3]
 iris.iloc[:, :]
+iris.values
 iris.iloc[:,list(range(0,3))]
+iris.values[:,0:4]
 iris.loc[0, ['PetalWidth']]=0.3
 # data[which(data$Sepal.Length<5.2),1]=NA
 iris.loc[iris['SepalLength']<5.2,['SepalLength']]=np.NaN
@@ -239,6 +242,8 @@ iris.rename(columns={'Species': 'Especies'},
 # #Formatear columnas
 # iris$Sepal.Length=as.integer(iris$Sepal.Length)
 iris.SepalLength.map(lambda x: int(x))
+iris.SepalLength = iris.SepalLength.astype('int32')
+iris = iris.astype('int32') #toda las variables numericas
 # iris$Sepal.Length=as.numeric(iris$Sepal.Length)
 iris.SepalLength.map(lambda x: float(x))
 # iris$Species=as.character(iris$Species)
