@@ -13,8 +13,6 @@ n_jobs=-1 #Hiperparámetro modelos en sklearn
 import pandas as pd
 from sklearn.datasets import load_iris
 iris = load_iris()
-import sklearn
-iris=sklearn.datasets.load_iris()
 datos=pd.DataFrame(iris.data)
 datos['species']=iris.target
 datos.columns=['SepalLength', 'SepalWidth', 'PetalLength', 'PetalWidth', 'Species']

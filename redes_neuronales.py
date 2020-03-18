@@ -341,11 +341,114 @@ yhat = model.predict(row)
 print('Predicted: %.3f' % (yhat))
 #Summary model
 model.summary()
-# plot the model
-from keras.utils import plot_model
-import pydot
-plot_model(model, 'model.png', show_shapes=True)
-from IPython.display import SVG
-from keras.utils import model_to_dot
 
-SVG(model_to_dot(model).create(prog='dot', format='svg'))
+#%% Learning Curve of a model
+
+# example of plotting learning curves
+from sklearn.datasets import make_classification
+from tensorflow.keras import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.optimizers import SGD
+from matplotlib import pyplot
+# create the dataset
+X, y = make_classification(n_samples=1000, n_classes=2, random_state=1)
+# determine the number of input features
+n_features = X.shape[1]
+# define model
+model = Sequential()
+model.add(Dense(10, activation='relu', kernel_initializer='he_normal', input_shape=(n_features,)))
+model.add(Dense(1, activation='sigmoid'))
+# compile the model
+sgd = SGD(learning_rate=0.001, momentum=0.8)
+model.compile(optimizer=sgd, loss='binary_crossentropy')
+# fit the model
+history = model.fit(X, y, epochs=100, batch_size=32, verbose=0, validation_split=0.3)
+# plot learning curves
+pyplot.title('Learning Curves')
+pyplot.xlabel('Epoch')
+pyplot.ylabel('Cross Entropy')
+pyplot.plot(history.history['loss'], label='train')
+pyplot.plot(history.history['val_loss'], label='val')
+pyplot.legend()
+pyplot.show()
+
+#save the model
+os.chdir("C:/Users/laguila/Documents")
+model.save('model.h5')
+
+#Loading a model
+model = load_model('model.h5')
+
+#%% Reduce overfitting with dropout
+
+# example of using dropout
+from sklearn.datasets import make_classification
+from tensorflow.keras import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import Dropout
+from matplotlib import pyplot
+# create the dataset
+X, y = make_classification(n_samples=1000, n_classes=2, random_state=1)
+# determine the number of input features
+n_features = X.shape[1]
+# define model
+model = Sequential()
+model.add(Dense(10, activation='relu', kernel_initializer='he_normal', input_shape=(n_features,)))
+model.add(Dropout(0.5))
+model.add(Dense(1, activation='sigmoid'))
+# compile the model
+model.compile(optimizer='adam', loss='binary_crossentropy')
+# fit the model
+model.fit(X, y, epochs=100, batch_size=32, verbose=0)
+
+#%% Batch normalization (deep NNs)
+# example of using batch normalization
+from sklearn.datasets import make_classification
+from tensorflow.keras import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import BatchNormalization
+from matplotlib import pyplot
+# create the dataset
+X, y = make_classification(n_samples=1000, n_classes=2, random_state=1)
+# determine the number of input features
+n_features = X.shape[1]
+# define model
+model = Sequential()
+model.add(Dense(10, activation='relu', kernel_initializer='he_normal', input_shape=(n_features,)))
+model.add(BatchNormalization())
+model.add(Dense(1, activation='sigmoid'))
+# compile the model
+model.compile(optimizer='adam', loss='binary_crossentropy')
+# fit the model
+model.fit(X, y, epochs=100, batch_size=32, verbose=0)
+
+
+#%% Early-stopping to avoid overfitting
+# example of using early stopping
+from sklearn.datasets import make_classification
+from tensorflow.keras import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.callbacks import EarlyStopping
+# create the dataset
+X, y = make_classification(n_samples=1000, n_classes=2, random_state=1)
+# determine the number of input features
+n_features = X.shape[1]
+# define model
+model = Sequential()
+model.add(Dense(10, activation='relu', kernel_initializer='he_normal', input_shape=(n_features,)))
+model.add(Dense(1, activation='sigmoid'))
+# compile the model
+model.compile(optimizer='adam', loss='binary_crossentropy')
+# configure early stopping
+es = EarlyStopping(monitor='val_loss', patience=5)
+# fit the model
+history = model.fit(X, y, epochs=200, batch_size=32, verbose=0, validation_split=0.3, callbacks=[es])
+
+pyplot.title('Learning Curves')
+pyplot.xlabel('Epoch')
+pyplot.ylabel('Cross Entropy')
+pyplot.plot(history.history['loss'], label='train')
+pyplot.plot(history.history['val_loss'], label='val')
+pyplot.legend()
+pyplot.show()
+

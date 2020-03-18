@@ -47,7 +47,7 @@ np.random.normal(0, 1, 5)
 np.random.rand(8)
 np.random.randint(2, 5, 7)
 # sample(10)
-random.sample(range(10), 4)
+np.random.sample()
 #seq(0,10,length.out = 4)
 np.linspace(0,10,4)
 # a[1]=abs(-5)
@@ -144,6 +144,7 @@ iris.values[:,0:4]
 iris.loc[0, ['PetalWidth']]=0.3
 # data[which(data$Sepal.Length<5.2),1]=NA
 iris.loc[iris['SepalLength']<5.2,['SepalLength']]=np.NaN
+iris.loc[iris.SepalLength<5.2,["SepalLength"]]=np.NaN
 # data[is.na(data)]=5.2
 iris=iris.fillna(5.2)
 # data=na.omit(data)
@@ -172,7 +173,7 @@ iris >> mutate (PetalNew=X.PetalLength*X.PetalWidth, Otra=1)
 iris >> group_by(X.Species) >> summarize (media=X.PetalLength.mean())
 
 #ifelse(y==0, 0, 1)
-np.where((y == 0), 0, 1)
+np.where((iris.SepalLength < 5), 0, 1)
 # data=iris %>% 
 # distinct(Species, Sepal.Length, .keep_all = T)
 iris.drop_duplicates()
@@ -215,19 +216,11 @@ a = np.array([[1, 2], [3, 4]])
 b = np.array([[5, 6]])
 np.concatenate((a, b), axis=0)
 
-
-# library(tidyverse)
-# data(iris)
-# data=iris %>% distinct(Sepal.Length, Species, .keep_all = T)
-iris.duplicated()
-iris.drop_duplicates()
-iris = iris.drop_duplicates(iris.columns[~iris.columns.isin(['SepalLength', 'Species'])], keep='first')
-
-
-
 # data=spread(data, key=Species, value=Sepal.Length)
+#Las especies en columnas, y el valor el de SepalLength. index las que no se tocan
 spread=pd.pivot_table(iris, values='SepalLength', index=['SepalWidth', 'PetalLength', 'PetalWidth'], columns='Species').reset_index()
 # data=gather(data, key=Species, value=Sepal.Length, 4:6)
+#columnas de species en una columna Species, y SepalLEngth el valor
 iris2=spread.melt(id_vars=['SepalWidth', 'PetalLength', 'PetalWidth'], var_name='Species', value_name='SepalLength').dropna(how='any').reset_index()
 
 
@@ -249,8 +242,6 @@ iris.SepalLength.map(lambda x: float(x))
 # iris$Species=as.character(iris$Species)
 iris.Species.map(lambda x: str(x))
 # iris$Species=as.factor(iris$Species)
-
-iris.SepalLength = iris.SepalLength.astype(np.int32)
 
 
 import math
@@ -321,9 +312,3 @@ plt.bar(df['Mes'], df['machine learning'], width=20)
 
 plt.hist(df['deep learning'], bins=15)
 
-
-#%% SEABORN
-
-import seaborn as sns
-sns.set()
-sns.scatterplot(df['Mes'], df['data science'])
