@@ -59,13 +59,14 @@ from sklearn.preprocessing import OneHotEncoder
 # define example
 values = array(['cold', 'cold', 'warm', 'cold', 'hot', 'hot', 'warm', 'cold', 'warm', 'hot'])
 print(values)
-# integer encode
+# integer encode: LabelEncoder + fit_transform
 label_encoder = LabelEncoder()
 integer_encoded = label_encoder.fit_transform(values)
 print(integer_encoded)
-# binary encode
+# binary encode: OneHotEncoder + fit_transform
 onehot_encoder = OneHotEncoder(sparse=False)
-integer_encoded = integer_encoded.reshape(len(integer_encoded), 1)
+integer_encoded = integer_encoded.reshape(len(integer_encoded), 1) #option1
+integer_encoded = integer_encoded[:,np.newaxis] #option 2
 onehot_encoded = onehot_encoder.fit_transform(integer_encoded)
 print(onehot_encoded)
 # invert first example
@@ -85,6 +86,9 @@ print(encoded)
 inverted = argmax(encoded[0])
 print(inverted)
 
+#Con pandas: pd.get_dummies
+pd.get_dummies(values)
+
 #Iris
 encoded = to_categorical(LabelEncoder().fit_transform(datos['Species']))
 datos_dummies=pd.concat([datos.iloc[:,[0, 1, 2, 3]], pd.DataFrame(encoded)], axis=1)
@@ -99,24 +103,24 @@ datos_dummies.columns=['SepalLength', 'SepalWidth', 'PetalLength', 'PetalWidth',
 # preProcValues <- preProcess(iris[,-5], method = "center") 
 # trainTransformed <- predict(preProcValues, iris[,-5])
 
-#Escalado estandard
+#Escalado estandard: scale + fit_transform
 from sklearn import preprocessing
 datos_scaled=preprocessing.scale(datos.iloc[:,list(range(0,4))])
 datos_scaled.mean(axis=0)
 datos_scaled.std(axis=0)
-#Escalado estandard 2
+#Escalado estandard 2 StandardScaler + fit_transform
 from sklearn import preprocessing
 std_scaler = preprocessing.StandardScaler()
 datos_scaled = std_scaler.fit_transform(datos.iloc[:,list(range(0,4))])
-#Escalado minimo maximo
+#Escalado minimo maximo MinMaxScaler + fit_transform
 from sklearn import preprocessing
-minmaxscaler=preprocessing.MinMaxScaler()
+minmaxscaler=preprocessing.MinMaxScaler(feature_range = (0,1))
 datos_scaled=minmaxscaler.fit_transform(datos.iloc[:,list(range(0,4))])
-#Escalado con outliers
+#Escalado con outliers RobustScaler + fit_transform
 from sklearn import preprocessing
 robustscaler=preprocessing.RobustScaler()
 datos_scaled=robustscaler.fit_transform(datos.iloc[:,list(range(0,4))])
-#Mapping to an uniform distribution
+#Mapping to an uniform distribution: QuantileTransformer + fit_transform
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 import numpy as np
@@ -133,16 +137,16 @@ plt.hist(X_train[:, 0])
 plt.hist(X_train_trans[:, 0])
 plt.show()
 
-#Mapping to a Gaussian distribution: 'box-cox' o 'Yeo-Johnson'
+#Mapping to a Gaussian distribution: 'box-cox' o 'Yeo-Johnson': PowerTransformer + fit_transform
 from sklearn import preprocessing
 gaussian_scaler = preprocessing.PowerTransformer(method='box-cox', standardize=False)
-datos_gauss = gaussian_scaler.fit_transform(datos.iloc[:,list(range(0,4))])
+datos_gauss = gaussian_scaler.fit_transform(datos.iloc[:,np.arange(0,4)])
 import matplotlib.pyplot as plt
 plt.hist(datos.iloc[:, 0])
 plt.hist(datos_gauss[:, 0])
 plt.show()
 
-#Normalizar
+#Normalizar: normalize
 from sklearn import preprocessing
 datos_normalized = preprocessing.normalize(datos.iloc[:,list(range(0,4))], norm='l2')
 
@@ -152,21 +156,21 @@ plt.hist(datos_scaled[:, 0])
 plt.hist(datos_normalized[:, 0])
 plt.show()
 
-#Discretizar
+#Discretizar: KBinsDiscretizer + fit_transform
 X = np.array([[ 1., -1.,  2.],
      [ 2.,  0.,  0.],
      [ 0.,  1., -1.]])
 est = preprocessing.KBinsDiscretizer(n_bins=2, encode='ordinal')
 est.fit_transform(X)
 
-#Binarizar
+#Binarizar: Binarizer + fit_transform
 X = np.array([[ 1., -1.,  2.],
      [ 2.,  0.,  0.],
      [ 0.,  1., -1.]])
 est = preprocessing.Binarizer(threshold=1.1)
 est.fit_transform(X)
 
-#Polinomizar 
+#Polinomizar: PolynomialFeatures + fit_transform
 import numpy as np
 from sklearn.preprocessing import PolynomialFeatures
 X = np.arange(6).reshape(3, 2)
@@ -176,6 +180,99 @@ poly2.fit_transform(X)
 #The features of X have been transformed from [x1, x2] to [1, x1, x2, x2x3]
 poly2 = PolynomialFeatures(2, interaction_only=True)
 poly2.fit_transform(X)
+
+#%% Ejemplo importancia escalar
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.naive_bayes import GaussianNB
+from sklearn import metrics
+import matplotlib.pyplot as plt
+from sklearn.datasets import load_wine
+from sklearn.pipeline import make_pipeline
+print(__doc__)
+
+# Code source: Tyler Lanigan <tylerlanigan@gmail.com>
+#              Sebastian Raschka <mail@sebastianraschka.com>
+
+# License: BSD 3 clause
+
+RANDOM_STATE = 42
+FIG_SIZE = (10, 7)
+
+
+features, target = load_wine(return_X_y=True)
+
+# Make a train/test split using 30% test size
+X_train, X_test, y_train, y_test = train_test_split(features, target,
+                                                    test_size=0.30,
+                                                    random_state=RANDOM_STATE)
+
+# Fit to data and predict using pipelined GNB and PCA.
+unscaled_clf = make_pipeline(PCA(n_components=2), GaussianNB())
+unscaled_clf.fit(X_train, y_train)
+pred_test = unscaled_clf.predict(X_test)
+
+# Fit to data and predict using pipelined scaling, GNB and PCA.
+std_clf = make_pipeline(StandardScaler(), PCA(n_components=2), GaussianNB())
+std_clf.fit(X_train, y_train)
+pred_test_std = std_clf.predict(X_test)
+
+# Show prediction accuracies in scaled and unscaled data.
+print('\nPrediction accuracy for the normal test dataset with PCA')
+print('{:.2%}\n'.format(metrics.accuracy_score(y_test, pred_test)))
+
+print('\nPrediction accuracy for the standardized test dataset with PCA')
+print('{:.2%}\n'.format(metrics.accuracy_score(y_test, pred_test_std)))
+
+# Extract PCA from pipeline
+pca = unscaled_clf.named_steps['pca']
+pca_std = std_clf.named_steps['pca']
+
+# Show first principal components
+print('\nPC 1 without scaling:\n', pca.components_[0])
+print('\nPC 1 with scaling:\n', pca_std.components_[0])
+
+# Use PCA without and with scale on X_train data for visualization.
+X_train_transformed = pca.transform(X_train)
+scaler = std_clf.named_steps['standardscaler']
+X_train_std_transformed = pca_std.transform(scaler.transform(X_train))
+
+# visualize standardized vs. untouched dataset with PCA performed
+fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=FIG_SIZE)
+
+
+for l, c, m in zip(range(0, 3), ('blue', 'red', 'green'), ('^', 's', 'o')):
+    ax1.scatter(X_train_transformed[y_train == l, 0],
+                X_train_transformed[y_train == l, 1],
+                color=c,
+                label='class %s' % l,
+                alpha=0.5,
+                marker=m
+                )
+
+for l, c, m in zip(range(0, 3), ('blue', 'red', 'green'), ('^', 's', 'o')):
+    ax2.scatter(X_train_std_transformed[y_train == l, 0],
+                X_train_std_transformed[y_train == l, 1],
+                color=c,
+                label='class %s' % l,
+                alpha=0.5,
+                marker=m
+                )
+
+ax1.set_title('Training dataset after PCA')
+ax2.set_title('Standardized training dataset after PCA')
+
+for ax in (ax1, ax2):
+    ax.set_xlabel('1st principal component')
+    ax.set_ylabel('2nd principal component')
+    ax.legend(loc='upper right')
+    ax.grid()
+
+plt.tight_layout()
+
+plt.show()
 
 #%% Distribuciones
 
@@ -319,13 +416,13 @@ from sklearn.feature_selection import SelectKBest, SelectPercentile
 from sklearn.feature_selection import chi2
 X, y = load_iris(return_X_y=True)
 X.shape
-    #For regression: f_regression, mutual_info_regression
-    #For classification: chi2, f_classif, mutual_info_classif
-    #Seleccionar los K mejores
+#For regression: f_regression, mutual_info_regression
+#For classification: chi2, f_classif, mutual_info_classif
+#Seleccionar los K mejores
 X_new = SelectKBest(chi2, k=2).fit_transform(X, y)
 X_new.shape
-    #Seleccionar los que caen dentro del percentil X
-X_new = SelectPercentile(chi2, k=2).fit_transform(X, y)
+#Seleccionar los que caen dentro del percentil X
+X_new = SelectPercentile(chi2, percentile = 100).fit_transform(X, y)
 X_new.shape
 
 
@@ -347,7 +444,7 @@ X_new.shape
 
 
 
-#%%Hacer un PCA
+#%%Hacer un PCA: PCA + fit_transform
 # library(caret)
 # preProcValues <- preProcess(iris[,-5], method = "pca")
 # trainTransformed <- predict(preProcValues, iris[,-5])
@@ -365,7 +462,7 @@ x = StandardScaler().fit_transform(x) #escalar
 from sklearn.decomposition import PCA
 df_pca = pd.DataFrame(data = PCA(n_components=2).fit_transform(x), columns = ['PC1', 'PC2']) #dos PC mas representativas
 df_pca = pd.DataFrame(data = PCA(0.70).fit_transform(x), columns = ['PC1']) #nnumero de variables necesarias para alcanzar 0.7 de variancia
-df_final = pd.concat([df_pca, df[['target']]], axis = 1)
+df_final = pd.concat([df_pca, df[['Species']]], axis = 1)
 
 
 
@@ -379,7 +476,12 @@ import matplotlib.pyplot as plt
 X, y = load_iris(return_X_y=True)
 X=pd.DataFrame(X)
 cors=X.corr(method='pearson')
-plt.matshow(cors)
+
+colors = np.random.rand(4)
+
+
+plt.matshow(cors, cmap=plt.cm.RdYlGn)
+plt.colorbar()
 
 #%%Downsampling
 # iris$objetivo=1
@@ -410,7 +512,7 @@ df_class_0_under = df_class_0.sample(count_class2)
 df_class_1_under = df_class_1.sample(count_class2)
 undersampled = pd.concat([df_class_0_under, df_class_1_under, df_class_2], axis=0)
 
-#%% Otro metodo
+#%% Otro metodo: RandomUnderSampler + fit_sample
 from imblearn.under_sampling import RandomUnderSampler
 from sklearn.datasets import make_classification
 
@@ -423,7 +525,7 @@ X, y = make_classification(
 X_rus, y_rus = RandomUnderSampler().fit_sample(X, y)
 
 
-#%% Downsampling using TomekLinks
+#%% Downsampling using TomekLinks: TomekLinks + fit_sample
 #https://www.kaggle.com/rafjaa/resampling-strategies-for-imbalanced-datasets
 from imblearn.under_sampling import TomekLinks
 from sklearn.datasets import make_classification
@@ -583,6 +685,10 @@ from sklearn.svm import SVC
 from sklearn.metrics import plot_roc_curve
 from sklearn.datasets import load_wine
 
+X, y = load_wine(return_X_y = True)
+X = X[:129]
+y = y[:129]
+
 X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42)
 svc = SVC(random_state=42)
 svc.fit(X_train, y_train)
@@ -596,8 +702,76 @@ rfc = RandomForestClassifier(random_state=42)
 rfc.fit(X_train, y_train)
 
 ax = plt.gca()
-rfc_disp = plot_roc_curve(rfc, X_test, y_test, ax=ax, alpha=0.8)
+plot_roc_curve(rfc, X_test, y_test, ax=ax, alpha=0.8)
 svc_disp.plot(ax=ax, alpha=0.8)
+
+#%% ROC Curve multiclass (manually)
+
+import numpy as np
+import matplotlib.pyplot as plt
+from itertools import cycle
+
+from sklearn import svm, datasets
+from sklearn.metrics import roc_curve, auc
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import label_binarize
+from sklearn.multiclass import OneVsRestClassifier
+from scipy import interp
+from sklearn.metrics import roc_auc_score
+
+# Import some data to play with
+iris = datasets.load_iris()
+X = iris.data
+y = iris.target
+
+# Binarize the output
+y = label_binarize(y, classes=[0, 1, 2])
+n_classes = y.shape[1]
+
+# Add noisy features to make the problem harder
+random_state = np.random.RandomState(0)
+n_samples, n_features = X.shape
+X = np.c_[X, random_state.randn(n_samples, 200 * n_features)]
+
+# shuffle and split training and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.5, random_state=0)
+
+# Learn to predict each class against the other
+classifier = OneVsRestClassifier(svm.SVC(kernel='linear', probability=True,random_state=random_state))
+y_score = classifier.fit(X_train, y_train).decision_function(X_test)
+
+# Compute ROC curve and ROC area for each class
+fpr = dict()
+tpr = dict()
+roc_auc = dict()
+for i in range(n_classes):
+    fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i])
+    roc_auc[i] = auc(fpr[i], tpr[i])
+
+# Compute micro-average ROC curve and ROC area
+fpr["micro"], tpr["micro"], _ = roc_curve(y_test.ravel(), y_score.ravel())
+roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
+
+#Plot of a ROC curve for a specific class
+
+plt.figure()
+lw = 2
+plt.plot(fpr[0], tpr[0], color='darkorange',
+         lw=lw, label='ROC curve (area = %0.2f)' % roc_auc[0])
+plt.plot(fpr[1], tpr[1], color='green',
+         lw=lw, label='ROC curve (area = %0.2f)' % roc_auc[1])
+plt.plot(fpr[2], tpr[2], color='blue',
+         lw=lw, label='ROC curve (area = %0.2f)' % roc_auc[2])
+plt.plot(fpr['micro'], tpr['micro'], color='black',
+         lw=lw, label='ROC curve (area = %0.2f)' % roc_auc['micro'])
+plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver operating characteristic example')
+plt.legend(loc="lower right")
+plt.show()
 
 #%%medias variables entre train y test
 # data(iris)
@@ -630,7 +804,7 @@ svc_disp.plot(ax=ax, alpha=0.8)
 #                       rfeControl = ctrl)
 # plot(results)
 
-#Ver la importancia de cada variable
+#Ver la importancia de cada variable: RFE + fit
 from sklearn.svm import SVC
 from sklearn.datasets import load_digits
 from sklearn.feature_selection import RFE
@@ -720,9 +894,44 @@ print("Ranking :", rfecv.ranking_)
 #                 verbose = T,
 #                 tuneLength=2)
 
+#%% Pipelines
+
+from sklearn.pipeline import Pipeline
+from sklearn.svm import SVC
+from sklearn.decomposition import PCA
+estimators = [('reduce_dim', PCA()), ('clf', SVC())]
+pipe = Pipeline(estimators)
+pipe
+
+from sklearn.pipeline import make_pipeline
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.preprocessing import Binarizer
+make_pipeline(Binarizer(), MultinomialNB())
+
+#Acceder a los componentes del pipeline
+pipe.steps[0]
+
+pipe[0]
+
+pipe['reduce_dim']
+
+#Modificar los parametros: <estimator>__<parameter>
+pipe.set_params(clf__C=10)
+
+#Haciendo Grid Search
+from sklearn.model_selection import GridSearchCV
+param_grid = dict(reduce_dim__n_components=[2, 5, 10],
+                  clf__C=[0.1, 10, 100])
+grid_search = GridSearchCV(pipe, param_grid=param_grid)
 
 #%% LINEAR MODELS
-#%% Linear Regression
+
+#r-squared = SS(mean) - SS(fit) / SS(mean), SS=sum of squares
+#%% Linear Regression: 
+# fit_intercept bool, optional, default True
+# normalize bool, optional, default False
+# copy_X bool, optional, default True
+# n_jobs int or None, optional (default=None)
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn import datasets, linear_model
@@ -754,11 +963,10 @@ diabetes_y_pred = regr.predict(diabetes_X_test)
 # The coefficients
 print('Coefficients: \n', regr.coef_)
 # The mean squared error
-print('Mean squared error: %.2f'
-      % mean_squared_error(diabetes_y_test, diabetes_y_pred))
+print('Mean squared error: %.2f'% mean_squared_error(diabetes_y_test, diabetes_y_pred))
 # The coefficient of determination: 1 is perfect prediction
-print('Coefficient of determination: %.2f'
-      % r2_score(diabetes_y_test, diabetes_y_pred))
+print('Coefficient of determination: %.2f' % r2_score(diabetes_y_test, diabetes_y_pred))
+regr.intercept_
 
 # Plot outputs
 plt.scatter(diabetes_X_test[:,0], diabetes_y_test,  color='black')
@@ -769,19 +977,68 @@ plt.yticks(())
 
 plt.show()
 
-#%% Ridge Regression
-
+#%% Ridge Regression #Muchos predictores y pocas observaciones: Usado cuando todas las variables aportan algo
+# alpha{float, ndarray of shape (n_targets,)}, default=1.0
+# fit_interceptbool, default=True
+# normalizebool, default=False
+# copy_Xbool, default=True
+# max_iterint, default=None
+# tolfloat, default=1e-3
+# solver{‘auto’, ‘svd’, ‘cholesky’, ‘lsqr’, ‘sparse_cg’, ‘sag’, ‘saga’}, default=’auto’
 import numpy as np
 from sklearn import linear_model
 reg = linear_model.RidgeCV(alphas=np.logspace(-6, 6, 13))
 reg.fit([[0, 0], [0, 0], [1, 1]], [0, .1, 1])
-
-
 reg.alpha_
+reg.intercept_, 
+reg.coef_
 
+reg2 = linear_model.Ridge(alpha=.5)
+reg2.fit([[0, 0], [0, 0], [1, 1]], [0, .1, 1])
+reg2.coef_
+reg2.intercept_
+reg2.n_iter_
 
-#%% Lasso Regression
+#%% PLOTTING ALPHAS in RIDGE REGRESSION
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn import linear_model
 
+# X is the 10x10 Hilbert matrix
+X = 1. / (np.arange(1, 11) + np.arange(0, 10)[:, np.newaxis])
+y = np.ones(10)
+
+plt.plot(X[:,0])
+
+# #############################################################################
+# Compute paths
+
+n_alphas = 200
+alphas = np.logspace(-10, -2, n_alphas)
+
+coefs = []
+for a in alphas:
+    ridge = linear_model.Ridge(alpha=a, fit_intercept=False)
+    ridge.fit(X, y)
+    coefs.append(ridge.coef_)
+
+# #############################################################################
+# Display results
+
+ax = plt.gca()
+
+ax.plot(alphas, coefs)
+ax.set_xscale('log')
+ax.set_xlim(ax.get_xlim()[::-1])  # reverse axis
+plt.xlabel('alpha')
+plt.ylabel('weights')
+plt.title('Ridge coefficients as a function of the regularization')
+plt.axis('tight')
+plt.show()
+
+#%% Lasso Regression: Muchos predictores y pocas observaciones:uando hay algunas variables inutiles totalmente
+#Lasso: alpha, fit_intercept, normalize
+#LassoCV: eps (alpha_min/alpha_max), n_alphas (numero alphas), fit_intercept, normalize, cv
 from sklearn.linear_model import LassoCV
 from sklearn.datasets import make_regression
 import matplotlib.pyplot as plt
@@ -800,6 +1057,8 @@ plt.scatter(X[:,0], pred,  color='red')
 plt.show()
 
 #%%Elastic Net
+#ElasticNet: l1_ratio (ratio l1-l2), alpha, fit_intercept, normalize
+#ElasticNetCV: l1_ratio (ratio l1-l2), n_alphas, fit_intercept, normalize, eps(alpha_min/alpha_max)
 from sklearn.linear_model import ElasticNetCV
 from sklearn.datasets import make_regression
 import matplotlib.pyplot as plt
@@ -815,26 +1074,41 @@ plt.scatter(X[:,0], y,  color='black')
 plt.scatter(X[:,0], pred,  color='red')
 plt.show()
 
-#%% Least Angle Regression LARS
-from sklearn.linear_model import LarsCV
+#%% Least Angle Regression LARS:
+#Lars:fit_intercept, verbose, normalize
+#LarsCV: fit_intercept, verbose, normalize, cv
+
+from sklearn.linear_model import LarsCV, Lars
 from sklearn.datasets import make_regression
 import matplotlib.pyplot as plt
 X, y = make_regression(n_samples=200, noise=4.0, random_state=0)
 reg = LarsCV(cv=5).fit(X, y)
 reg.score(X, y)
-
 reg.alpha_
-
 pred=reg.predict(X[:,])
 
 plt.scatter(X[:,0], y,  color='black')
 plt.scatter(X[:,0], pred,  color='red')
 plt.show()
 
+reg2 = Lars().fit(X, y)
+reg2.score(X, y)
+reg2.alpha_
+pred=reg2.predict(X[:,])
 
+#%% LassoLars: alpha, fit_intercept, normalize
+#LassoLarsCV: alpha, fit_intercept, normalize, cv
+from sklearn import linear_model
+reg = linear_model.LassoLars(alpha=0.01)
+reg.fit([[-1, 1], [0, 0], [1, 1]], [-1, 0, -1])
 
+print(reg.coef_)
+
+reg2 = linear_model.LassoLarsCV()
+reg2.fit([[-1, 1], [0, 0], [1, 1]], [-1, 0, -1])
 
 #%% Bayesian Regression
+#BayesianRidge: n_iter, tol, alpha_1, alpha_2, lambda_1, lambda_2, fit_intercept, normalize
 from sklearn import linear_model
 from sklearn.datasets import make_regression
 
@@ -847,13 +1121,124 @@ plt.scatter(X[:,0], y,  color='black')
 plt.scatter(X[:,0], pred,  color='red')
 plt.show()
 
+
+#%% 
+
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy import stats
+
+from sklearn.linear_model import BayesianRidge, LinearRegression
+
+# #############################################################################
+# Generating simulated data with Gaussian weights
+np.random.seed(0)
+n_samples, n_features = 100, 100
+X = np.random.randn(n_samples, n_features)  # Create Gaussian data
+# Create weights with a precision lambda_ of 4.
+lambda_ = 4.
+w = np.zeros(n_features)
+# Only keep 10 weights of interest
+relevant_features = np.random.randint(0, n_features, 10)
+for i in relevant_features:
+    w[i] = stats.norm.rvs(loc=0, scale=1. / np.sqrt(lambda_)) #loc location== mean, scale==sd
+# Create noise with a precision alpha of 50.
+alpha_ = 50.
+noise = stats.norm.rvs(loc=0, scale=1. / np.sqrt(alpha_), size=n_samples)
+# Create the target
+y = np.dot(X, w) + noise
+
+# #############################################################################
+# Fit the Bayesian Ridge Regression and an OLS for comparison
+clf = BayesianRidge(compute_score=True)
+clf.fit(X, y)
+
+ols = LinearRegression()
+ols.fit(X, y)
+
+# #############################################################################
+# Plot true weights, estimated weights, histogram of the weights, and
+# predictions with standard deviations
+lw = 2
+plt.figure(figsize=(6, 5))
+plt.title("Weights of the model")
+plt.plot(clf.coef_, color='lightgreen', linewidth=lw,
+         label="Bayesian Ridge estimate")
+plt.plot(w, color='gold', linewidth=lw, label="Ground truth")
+plt.plot(ols.coef_, color='navy', linestyle='--', label="OLS estimate")
+plt.xlabel("Features")
+plt.ylabel("Values of the weights")
+plt.legend(loc="best", prop=dict(size=12))
+
+plt.figure(figsize=(6, 5))
+plt.title("Histogram of the weights")
+plt.hist(clf.coef_, bins=n_features, color='gold', log=True,
+         edgecolor='black')
+plt.scatter(clf.coef_[relevant_features], np.full(len(relevant_features), 5.),
+            color='navy', label="Relevant features")
+plt.ylabel("Features")
+plt.xlabel("Values of the weights")
+plt.legend(loc="upper left")
+
+plt.figure(figsize=(6, 5))
+plt.title("Marginal log-likelihood")
+plt.plot(clf.scores_, color='navy', linewidth=lw)
+plt.ylabel("Score")
+plt.xlabel("Iterations")
+
+
+# Plotting some predictions for polynomial regression
+def f(x, noise_amount):
+    y = np.sqrt(x) * np.sin(x)
+    noise = np.random.normal(0, 1, len(x))
+    return y + noise_amount * noise
+
+
+degree = 10
+X = np.linspace(0, 10, 100)
+y = f(X, noise_amount=0.1)
+clf_poly = BayesianRidge()
+clf_poly.fit(np.vander(X, degree), y)
+
+X_plot = np.linspace(0, 11, 25)
+y_plot = f(X_plot, noise_amount=0)
+y_mean, y_std = clf_poly.predict(np.vander(X_plot, degree), return_std=True)
+plt.figure(figsize=(6, 5))
+plt.errorbar(X_plot, y_mean, y_std, color='navy',
+             label="Polynomial Bayesian Ridge Regression", linewidth=lw)
+plt.plot(X_plot, y_plot, color='gold', linewidth=lw,
+         label="Ground Truth")
+plt.ylabel("Output y")
+plt.xlabel("Feature X")
+plt.legend(loc="lower left")
+plt.show()
+
+
+
 #%% Logistic Regression
+#odds = favorables/no_favorables 
+#p=favorables/posibles
+#odds = p/1-p
+#1. log(odds)=log(p/(1-p)) 
+#2. p=exp(log(odds))/1+exp(log(odds)) #pasar de posibilidades a probabilidad en regresion logistica
+
+#Empezamos con el valor de una recta, pendiente y intercept
+#Proyectamos los puntos (+-inf) sobre la recta, y vemos su log(odds)
+#transformamos a probabilidades cada valor (2.)
+#Calculamos la probabilidad total (log(likelyhood)de que eso ocurra, como producto probabilidades
+#Repetimos el proceso con otra linea (rotada ligeramente, que pasa por 0,1)
+
+# Analisis Rsquared y p-value
+    #Rsquared: LL(base)-LL(fit)/LL(base), LL=log likelyhood. En fit, cada punto tiene su probabilidad. En base, todos tienen
+    #la probabilidad general: favorables/posibles
+
+    #2(LL(fit)-LL(base))=Chi squared(degrees of freedom) -> p-value
 from sklearn.datasets import load_iris
 from sklearn.linear_model import LogisticRegression
 import matplotlib.pyplot as plt
 
 X, y = load_iris(return_X_y=True)
-clf = LogisticRegression(random_state=0).fit(X, y)
+clf = LogisticRegression(random_state=0,).fit(X, y)
 
 clf.predict(X[:2, :])
 clf.predict_proba(X[:2, :])
@@ -923,7 +1308,7 @@ from sklearn import linear_model, datasets
 
 
 n_samples = 1000
-n_outliers = 50
+n_outliers = 200
 
 X, y, coef = datasets.make_regression(n_samples=n_samples, n_features=1,
                                       n_informative=1, noise=10,
@@ -934,8 +1319,8 @@ plt.show()
 
 # Add outlier data
 np.random.seed(0)
-X[:n_outliers] = 3 + 0.5 * np.random.normal(size=(n_outliers, 1))
-y[:n_outliers] = -3 + 10 * np.random.normal(size=n_outliers)
+X[:n_outliers] = 0 + 3 * np.random.normal(size=(n_outliers, 1))
+y[:n_outliers] = 0 + 10 * np.random.normal(size=n_outliers)
 
 plt.scatter(X, y, c="red")
 plt.show()
@@ -977,10 +1362,11 @@ plt.show()
 import numpy as np
 import matplotlib.pyplot as plt
 
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import Ridge, LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import make_pipeline, Pipeline
 
+#Pipeline?
 
 def f(x):
     """ function to approximate by polynomial interpolation"""
@@ -1027,7 +1413,7 @@ plt.show()
 import matplotlib.pyplot as plt
 
 from sklearn import datasets
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
 iris = datasets.load_iris()
 
@@ -1056,6 +1442,42 @@ plt.legend(loc='best', shadow=False, scatterpoints=1)
 plt.title('LDA of IRIS dataset')
 
 plt.show()
+
+#%% t-SNE (menos de 50 variables. Si hay mas, hacer un pca antes)
+
+import matplotlib.pyplot as plt
+from sklearn import datasets
+import numpy as np
+from sklearn.manifold import TSNE
+
+iris = datasets.load_iris()
+
+X = iris.data
+y = iris.target
+target_names = iris.target_names
+
+lda = TSNE(n_components=2)
+X_r = lda.fit(X, y).fit_transform(X)
+
+plt.figure()
+colors = ['navy', 'turquoise', 'darkorange']
+lw = 2
+
+for color, i, target_name in zip(colors, [0, 1, 2], target_names):
+    plt.scatter(X[y == i, 0], X[y == i, 1], color=color, alpha=.8, lw=lw,
+                label=target_name)
+plt.legend(loc='best', shadow=False, scatterpoints=1)
+plt.title('IRIS dataset')
+
+plt.figure()
+for color, i, target_name in zip(colors, [0, 1, 2], target_names):
+    plt.scatter(X_r[y == i, 0], X_r[y == i, 1], alpha=.8, color=color,
+                label=target_name)
+plt.legend(loc='best', shadow=False, scatterpoints=1)
+plt.title('LDA of IRIS dataset')
+
+plt.show()
+
 
 #%% Support Vector Machine, Regression
 
@@ -1299,7 +1721,7 @@ x_ = np.sort(x[0:30]).reshape(-1, 1)
 y_ = f(x_).reshape(-1, 1)
 
 knn=KNeighborsRegressor().fit(x_, y_)
-x_ = np.sort(x[60:65]).reshape(-1, 1)
+x_ = np.sort(x[60:75]).reshape(-1, 1)
 pred=knn.predict(x_)
 
 plt.scatter(x, f(x), color='navy', s=30, marker='o', label="training points")
@@ -1354,6 +1776,37 @@ plt.yticks(())
 plt.tight_layout()
 plt.show()
 
+#%% Gaussian Process Regressor
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF
+
+
+def f(x):
+    """ function to approximate by polynomial interpolation"""
+    return x * np.sin(x)
+
+
+# generate points used to plot
+x_plot = np.linspace(0, 10, 100)
+
+# generate points and keep a subset of them
+x = np.linspace(0, 10, 100)
+rng = np.random.RandomState(0)
+rng.shuffle(x)
+x_ = np.sort(x[0:30]).reshape(-1, 1)
+y_ = f(x_).reshape(-1, 1)
+
+GPC=GaussianProcessRegressor().fit(x_, y_)
+x_ = np.sort(x[60:85]).reshape(-1, 1)
+pred=GPC.predict(x_)
+
+plt.scatter(x, f(x), color='navy', s=30, marker='o', label="training points")
+plt.scatter(x_, pred, color='red', s=30, marker='o', label="training points")
+plt.show() 
+
 #%% Naive Bayes
 import numpy as np
 import matplotlib.pyplot as plt
@@ -1395,6 +1848,15 @@ plt.tight_layout()
 plt.show()
 
 #%% Decision Trees CLASIFICATION
+#clasificacion dos clases: gini impurity (1-prob(yes)^2 - prob(no)^2 para cada leaf, y luego 
+#media ponderada con las dos leafs) entre clasificacion
+#segun el primer predictor y la variable objetivo, segundo predictor y objetivo, etc. Coger
+#menor gini como root. Repetir proceso
+#Si la variable es continua, tomar valores medios entre registros, y calcular gini impurity igual
+#Si el predictor es de varios tipos, calcular gini con cada combinacion: red, green, blue --> se
+#calcula con red, green, blue, red-green, red-blue, green-blue.
+#A veces hacer un nodo extra aumenta gini impurity. Entonces se meten todos los casos en la misma
+#hoja y no se hace el nodo
 
 from sklearn.datasets import load_iris
 from sklearn import tree
@@ -1414,7 +1876,14 @@ r = export_text(decision_tree, feature_names=iris['feature_names'])
 print(r)
 
 #%% Decision Trees Regression
+#Rootsplit: entre primery segundo punto, segundo y tercero, etc. Tomar la media de los puntos
+#a la izda y dcha, calcular sum of squares residuals y repetir para todos los splits. 
+#Repetir este proceso a la izda y dcha de este rootsplit, iterativamente, hasta que el numero
+#de observaciones por leaf sea menor a un minimo (~7, ~20)
 
+#Missing data:
+#Most common option(mean)
+#Regresion con la variable mas correlacionada(numerica), o reemplazar con valor de variable mas correlacionada (categorica)
 import numpy as np
 from sklearn.tree import DecisionTreeRegressor
 import matplotlib.pyplot as plt
@@ -1523,6 +1992,17 @@ plt.tight_layout()
 plt.show()
 
 #%% RANDOM FOREST 
+#Bootstrap(samples, sqrt(features)) +  decision tree + aggregating(voting, mean...) (BAgging = Bootstrapping + Agregating data)
+#OOB error(out of bag error) es el error al clasificar registros no usados en bagging
+
+#Missing values in train
+#Inicial: categorical: igual que la variable objetivo. Numerical: mean
+#Refinamiento: Run decision tree para cada registro. Repetir en cada tree. 
+#Matriz de similitud: registros similares en mismas hojas. Normalizar entre numero arboles
+
+
+
+
 
 #Classification
 
@@ -1551,7 +2031,8 @@ print(regr.feature_importances_)
 
 print(regr.predict([[0, 0, 0, 0]]))
 #%% EXTREMELY RANDOMIZED TREES
-
+#Diferencias random forest: bootstrapping without replacement, and n_features=sqrt(max_n_features)+
+#+ no optimizar el root_split o split_nodes, sino hacerlo aleatorio (mas diversificado)
 from sklearn.model_selection import cross_val_score
 from sklearn.datasets import make_blobs
 from sklearn.ensemble import RandomForestClassifier
@@ -1679,6 +2160,25 @@ ax.set_yticks(())
 plt.tight_layout()
 plt.show()
 #%% ADABOOST
+#Trees = Stumps, que son decision trees de un solo nodo, no como en random forest
+#En random forest, cada arbol vota igual, no como en adaboost
+#En random forest, el orden de crecer los arboles no importa. En Adaboost si
+#Proceso:
+    #Se le da un peso a cada registro. Al principio todos pesan igual. Suma pesos = 1
+    #Se hace un arbol por cada variable, continua o discreta.
+    #Gini index para cada stump. Seleccionar este
+    #Se calcula la suma de pesos de los registros equivocados en ese stump
+    #Amount_to_say = 0.5*log((1-total_error)/total_error)
+    #Cambiar pesos de cada registro: new_weight_incorrect = sample_weight*exp(Amount_to_say)
+    #new_weight_correct = sample_weight*exp(-Amount_to_say)
+    #Normalizar los nuevos pesos
+    #Repetir todo el proceso, con nuevos stumps con weigthed Gini index, o nuevo dataset con variables
+        #con mas peso repetidas
+    #Para predecir, cada stump tiene asociado un amount_to_say, que sera el weighted_vote de cada uno
+    
+    
+
+
 #Regression
 
 import numpy as np
@@ -1895,7 +2395,13 @@ plt.show()
 
 models[0].feature_importances_
 
-#%% Gradient Tree Boosting regression
+#%% Gradient Boosting regression:
+    #average weight: mean
+    #build tree to predict error= real - mean
+    #mean de todos los valores de cada hoja
+    #new_prediction = mean + lr * valor(tree_1)
+    #Calcular de nuevos los errores a predecir, y repetir proceso
+
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -1959,6 +2465,13 @@ plt.title('Variable Importance')
 plt.show()
 
 #%% Gradient Boosting Classification
+#initial_prediction = log(favorables/no_favorables)
+#residuals = real (1 o 0) - initial_prediction
+#Grow tree, make prediction for each sample
+#Predictions = inicial_prediction(log_odds) + prediction_tree(probability) ->transform prbability to log(odds)
+    #prediction_tree = sum(residuals)/sum(previous_probabilty*(1-previos_probability))
+    #Predictions = initial_prediction + prediction_tree(log(odds))
+#Convert predictions to probability: exp(log(odds))/1+exp(log_odds)
 from sklearn.datasets import make_hastie_10_2
 from sklearn.ensemble import GradientBoostingClassifier
 
@@ -2032,6 +2545,7 @@ plt.plot(reg1.predict(xt), 'gd', label='GradientBoostingRegressor')
 plt.plot(reg2.predict(xt), 'b^', label='RandomForestRegressor')
 plt.plot(reg3.predict(xt), 'ys', label='LinearRegression')
 plt.plot(ereg.predict(xt), 'r*', label='VotingRegressor')
+plt.plot(y[:20], 'k*', label='Truth')
 plt.tick_params(axis='x', which='both', bottom=False, top=False,
                 labelbottom=False)
 plt.ylabel('predicted')
@@ -2091,6 +2605,33 @@ multi_layer_regressor.fit(X_train, y_train)
 print('R2 score: {:.2f}'
       .format(multi_layer_regressor.score(X_test, y_test)))
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #%% LABEL PROPAGATION (SEMI-SUPERVISED)
 
 import numpy as np
@@ -2137,6 +2678,93 @@ plt.legend(scatterpoints=1, shadow=False, loc='upper right')
 plt.title("Labels learned with Label Spreading (KNN)")
 
 plt.subplots_adjust(left=0.07, bottom=0.07, right=0.93, top=0.92)
+plt.show()
+
+#%% LABEL PROPAGATION
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn import datasets
+from sklearn import svm
+from sklearn.semi_supervised import LabelSpreading
+
+rng = np.random.RandomState(0)
+
+iris = datasets.load_iris()
+
+X = iris.data[:, :2]
+y = iris.target
+
+# step size in the mesh
+h = .02
+
+y_30 = np.copy(y)
+y_30[rng.rand(len(y)) < 0.3] = -1
+y_50 = np.copy(y)
+y_50[rng.rand(len(y)) < 0.5] = -1
+# we create an instance of SVM and fit out data. We do not scale our
+# data since we want to plot the support vectors
+ls30 = (LabelSpreading().fit(X, y_30), y_30)
+ls50 = (LabelSpreading().fit(X, y_50), y_50)
+ls100 = (LabelSpreading().fit(X, y), y)
+rbf_svc = (svm.SVC(kernel='rbf', gamma=.5).fit(X, y), y)
+
+# create a mesh to plot in
+x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
+y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                     np.arange(y_min, y_max, h))
+
+# title for the plots
+titles = ['Label Spreading 30% data',
+          'Label Spreading 50% data',
+          'Label Spreading 100% data',
+          'SVC with rbf kernel']
+
+color_map = {-1: (1, 1, 1), 0: (0, 0, .9), 1: (1, 0, 0), 2: (.8, .6, 0)}
+
+for i, (clf, y_train) in enumerate((ls30, ls50, ls100, rbf_svc)):
+    # Plot the decision boundary. For that, we will assign a color to each
+    # point in the mesh [x_min, x_max]x[y_min, y_max].
+    plt.subplot(2, 2, i + 1)
+    Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
+
+    # Put the result into a color plot
+    Z = Z.reshape(xx.shape)
+    plt.contourf(xx, yy, Z, cmap=plt.cm.Paired)
+    plt.axis('off')
+
+    # Plot also the training points
+    colors = [color_map[y] for y in y_train]
+    plt.scatter(X[:, 0], X[:, 1], c=colors, edgecolors='black')
+
+    plt.title(titles[i])
+
+plt.suptitle("Unlabeled points are colored white", y=0.1)
+plt.show()
+
+#%% LABEL SPREADING
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn import datasets
+from sklearn.semi_supervised import LabelSpreading
+label_prop_model = LabelSpreading()
+iris = datasets.load_iris()
+rng = np.random.RandomState(42)
+random_unlabeled_points = rng.rand(len(iris.target)) < 0.3
+labels = np.copy(iris.target)
+labels[random_unlabeled_points] = -1
+label_prop_model.fit(iris.data, labels)
+
+labels1 = np.copy(iris.target)
+labels2=label_prop_model.transduction_
+
+plt.subplot(1, 3, 1)
+plt.scatter(iris.data[:,0], iris.data[:,2], c=labels1)
+plt.subplot(1, 3, 2)
+plt.scatter(iris.data[:,0], iris.data[:,2], c=labels2)
+plt.subplot(1, 3, 3)
+plt.scatter(iris.data[:,0], iris.data[:,2], c=labels)
 plt.show()
 
 #%% ISOTONIC REGRESSION
@@ -2478,7 +3106,143 @@ for X, y in datasets:
 
 figure.subplots_adjust(left=.02, right=.98)
 plt.show()
-#%%
+#%% COMPARACION CLASIFICADORES
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.datasets import make_moons, make_circles, make_classification
+from sklearn.neural_network import MLPClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+
+h = .02  # step size in the mesh
+
+names = ["Nearest Neighbors", "Linear SVM", "RBF SVM", "Gaussian Process",
+         "Decision Tree", "Random Forest", "Neural Net", "AdaBoost",
+         "Naive Bayes", "QDA"]
+
+classifiers = [
+    KNeighborsClassifier(3),
+    SVC(kernel="linear", C=0.025),
+    SVC(gamma=2, C=1),
+    GaussianProcessClassifier(1.0 * RBF(1.0)),
+    DecisionTreeClassifier(max_depth=5),
+    RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
+    MLPClassifier(alpha=1, max_iter=1000),
+    AdaBoostClassifier(),
+    GaussianNB(),
+    QuadraticDiscriminantAnalysis()]
+
+X, y = make_classification(n_features=2, n_redundant=0, n_informative=2,
+                           random_state=1, n_clusters_per_class=1)
+rng = np.random.RandomState(2)
+X += 2 * rng.uniform(size=X.shape)
+linearly_separable = (X, y)
+
+datasets = [make_moons(noise=0.3, random_state=0),
+            make_circles(noise=0.2, factor=0.5, random_state=1),
+            linearly_separable
+            ]
+
+figure = plt.figure(figsize=(27, 9))
+i = 1
+# iterate over datasets
+for ds_cnt, ds in enumerate(datasets):
+    # preprocess dataset, split into training and test part
+    X, y = ds
+    X = StandardScaler().fit_transform(X)
+    X_train, X_test, y_train, y_test = \
+        train_test_split(X, y, test_size=.4, random_state=42)
+
+    x_min, x_max = X[:, 0].min() - .5, X[:, 0].max() + .5
+    y_min, y_max = X[:, 1].min() - .5, X[:, 1].max() + .5
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                         np.arange(y_min, y_max, h))
+
+    # just plot the dataset first
+    cm = plt.cm.RdBu
+    cm_bright = ListedColormap(['#FF0000', '#0000FF'])
+    ax = plt.subplot(len(datasets), len(classifiers) + 1, i)
+    if ds_cnt == 0:
+        ax.set_title("Input data")
+    # Plot the training points
+    ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, cmap=cm_bright,
+               edgecolors='k')
+    # Plot the testing points
+    ax.scatter(X_test[:, 0], X_test[:, 1], c=y_test, cmap=cm_bright, alpha=0.6,
+               edgecolors='k')
+    ax.set_xlim(xx.min(), xx.max())
+    ax.set_ylim(yy.min(), yy.max())
+    ax.set_xticks(())
+    ax.set_yticks(())
+    i += 1
+
+    # iterate over classifiers
+    for name, clf in zip(names, classifiers):
+        ax = plt.subplot(len(datasets), len(classifiers) + 1, i)
+        clf.fit(X_train, y_train)
+        score = clf.score(X_test, y_test)
+
+        # Plot the decision boundary. For that, we will assign a color to each
+        # point in the mesh [x_min, x_max]x[y_min, y_max].
+        if hasattr(clf, "decision_function"):
+            Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
+        else:
+            Z = clf.predict_proba(np.c_[xx.ravel(), yy.ravel()])[:, 1]
+
+        # Put the result into a color plot
+        Z = Z.reshape(xx.shape)
+        ax.contourf(xx, yy, Z, cmap=cm, alpha=.8)
+
+        # Plot the training points
+        ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, cmap=cm_bright,
+                   edgecolors='k')
+        # Plot the testing points
+        ax.scatter(X_test[:, 0], X_test[:, 1], c=y_test, cmap=cm_bright,
+                   edgecolors='k', alpha=0.6)
+
+        ax.set_xlim(xx.min(), xx.max())
+        ax.set_ylim(yy.min(), yy.max())
+        ax.set_xticks(())
+        ax.set_yticks(())
+        if ds_cnt == 0:
+            ax.set_title(name)
+        ax.text(xx.max() - .3, yy.min() + .3, ('%.2f' % score).lstrip('0'),
+                size=15, horizontalalignment='right')
+        i += 1
+
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

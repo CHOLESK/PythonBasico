@@ -204,73 +204,9 @@ print(z1) #esto no me lo imprime, tengo que hacer print(list(z1)
 print(*z1) #esto me lo imprime, porque * descomprime
 result1, result2=zip(*z1) #esto da que result1=mutants, result2=powers
 
-#%%
-#matplotlib
-print(gdp_cap[-1]); print(life_exp[-1]) #varios comandos en una linea, con punto y coma
-
-import matplotlib.pyplot as plt
-
-plt.plot(year, pop) #year y pop son listas. Grafica por lineas
-plt.show() #siempre se pone al final
-plt.clf() #y eso para limpiar la grafica. Poner antes de hacer otra
-
-plt.scatter(gdp_cap, life_exp, s = np_pop) #grafica de puntos. s es size. np_pop es un array, numpy.array(pop)
-#♣Otros argumentos son c = col, del tipo diccionario. Un color por pais, por ejemplo
-alpha=0.8
-df.plot(subplots=True) #subplots para cada columna del data frame, o bien
-df.subplots(nrows=2, ncols=1) #preparar los subplots
-
-column_list2 = ['Temperature (deg F)','Dew Point (deg F)']
-df[column_list2].plot() #plotear solo algunas columnas, guardadas como una lista en column_list2
-plt.xscale('log') #eje x logaritmico
-plt.xlabel('xlab')
-plt.ylabel('ylab')
-plt.title('title')
-tick_val = [1000, 10000, 100000] #ticks donde se pone el tick lab
-tick_lab = ['1k', '10k', '100k']
-plt.xticks(tick_val, tick_lab)
-plt.xlim(20, 55)
-plt.ylim(20, 55)
-plt.text(1550, 71, 'India')
-plt.text(5700, 80, 'China')
-plt.grid(True)
-plt.hist(life_exp, bins = 5) #histogramas
-plt.imshow(im_sq, cmap='Greys', interpolation='nearest') #una imagen de 28*28 pixels
-plt.show()
-
-df['Existing Zoning Sqft'].plot(kind='scatter', x='Year', y='Total Urban Population') #kind="hist", "box", logx=True, logy=True
-df.boxplot(column="initial_cost", by="Borough", rot=90)
-
-plt.subplot(2, 1, 1) #añadir subplot
 
 
 
-
-#%%
-#Leer archivos
-ls #saber que tengo en mi directorio
-import glob
-csv_files = glob.glob('*.csv') #lista de archivos csv en mi directorio
-import os
-wd = os.getcwd()
-os.listdir(wd)
-
-file = open("moby_dick.txt", "r")
-print(file.read())
-file.close()
-print(file.closed)# Check whether file is closed
-
-with open("world_dev_ind.csv") as file:
-    file.readline() # lee la primera linea. no la imprime
-    counts_dict = {}
-    for j in range(1000):      
-        line = file.readline().split(',')# Split the current line into a list: line
-        first_col = line[0]
-        if first_col in counts_dict.keys():
-            counts_dict[first_col] += 1
-        else:
-            counts_dict[first_col] = 1
-print(counts_dict)
 
 
 #%%
