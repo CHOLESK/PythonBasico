@@ -1,9 +1,38 @@
-# #Parallel processing
-# library(doParallel)
-# cores=detectCores()-1
-# cl <- makePSOCKcluster(cores) #Usar 2 nucleos del procesador en paralelo
-# registerDoParallel(cl)
-n_jobs=-1 #Hiperparámetro modelos en sklearn
+#Precargados
+from sklearn.datasets import load_boston, fetch_california_housing
+X, y = load_boston(return_X_y = True)
+
+X, y = fetch_california_housing(return_X_y = True)
+
+#Descargar de openml
+from sklearn.datasets import fetch_openml
+mice = fetch_openml(name='miceprotein', version=4)
+mice.url
+
+#Generados
+from sklearn.datasets import make_blobs, make_classification, make_gaussian_quantiles, make_multilabel_classification, make_regression
+X, y = make_blobs(n_samples=100, n_features=2, centers=None, cluster_std=1.0, 
+                  center_box=(-10.0, 10.0), shuffle=True, random_state=None)
+
+X, y = make_classification(n_samples=100, n_features=20, n_informative=2, n_redundant=2, 
+                           n_repeated=0, n_classes=2, n_clusters_per_class=2, weights=None, 
+                           flip_y=0.01, class_sep=1.0, hypercube=True, shift=0.0, scale=1.0, 
+                           shuffle=True, random_state=None)
+
+X, y = make_gaussian_quantiles(mean=None, cov=1.0, n_samples=100, n_features=2,
+                               n_classes=3, shuffle=True, random_state=None)
+
+X, y = make_multilabel_classification(n_samples=100, n_features=20, n_classes=5, 
+                                      n_labels=2, length=50, allow_unlabeled=True, 
+                                      sparse=False, return_indicator='dense', 
+                                      return_distributions=False, random_state=None)
+
+X, y = make_regression(n_samples=100, n_features=100, n_informative=10, n_targets=1, 
+                       bias=0.0, effective_rank=None, tail_strength=0.5, noise=0.0, 
+                       shuffle=True, coef=False, random_state=None)
+
+
+
  #%% Crear train y test
 # library(rsample)
 # set.seed(123)
@@ -73,18 +102,6 @@ print(onehot_encoded)
 inverted = label_encoder.inverse_transform([argmax(onehot_encoded[2, :])])
 print(inverted)
 
-#Con Keras
-from numpy import array
-from numpy import argmax
-from keras.utils import to_categorical
-from sklearn.preprocessing import LabelEncoder
-values = array(['cold', 'cold', 'warm', 'cold', 'hot', 'hot', 'warm', 'cold', 'warm', 'hot'])
-# one hot encode
-encoded = to_categorical(LabelEncoder().fit_transform(values))
-print(encoded)
-# invert encoding
-inverted = argmax(encoded[0])
-print(inverted)
 
 #Con pandas: pd.get_dummies
 pd.get_dummies(values)
@@ -93,6 +110,8 @@ pd.get_dummies(values)
 encoded = to_categorical(LabelEncoder().fit_transform(datos['Species']))
 datos_dummies=pd.concat([datos.iloc[:,[0, 1, 2, 3]], pd.DataFrame(encoded)], axis=1)
 datos_dummies.columns=['SepalLength', 'SepalWidth', 'PetalLength', 'PetalWidth', 'setosa', 'versicolor', 'virginica']
+
+
 
 #%% Escalar y centrar
 # library(caret)
@@ -856,6 +875,164 @@ print("Ranking :", rfecv.ranking_)
 #             plot = "box")
  
 
+from sklearn.datasets import load_iris
+iris = load_iris()
+mc_clf = GradientBoostingClassifier(n_estimators=10,
+    max_depth=1).fit(iris.data, iris.target)
+features = [3, 2, (3, 2)]
+plot_partial_dependence(mc_clf, X, features, target=0) 
+
+
+#%% PDPs
+from time import time
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import QuantileTransformer
+from sklearn.pipeline import make_pipeline
+
+from sklearn.inspection import partial_dependence
+from sklearn.inspection import plot_partial_dependence
+from sklearn.experimental import enable_hist_gradient_boosting  # noqa
+from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.neural_network import MLPRegressor
+from sklearn.datasets import fetch_california_housing
+
+#Cargar datos y crear trainy test
+cal_housing = fetch_california_housing()
+X = pd.DataFrame(cal_housing.data, columns=cal_housing.feature_names)
+y = cal_housing.target
+
+y -= y.mean()
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=0)
+
+#Entrenar el modelo
+print("Training MLPRegressor...")
+tic = time()
+est = make_pipeline(QuantileTransformer(),
+                    MLPRegressor(hidden_layer_sizes=(50, 50),
+                                 learning_rate_init=0.01,
+                                 early_stopping=True))
+est.fit(X_train, y_train)
+print("done in {:.3f}s".format(time() - tic))
+print("Test R2 score: {:.2f}".format(est.score(X_test, y_test)))
+
+#Compute PDPs
+print('Computing partial dependence plots...')
+tic = time()
+# We don't compute the 2-way PDP (5, 1) here, because it is a lot slower
+# with the brute method.
+features = ['MedInc', 'AveOccup', 'HouseAge', 'AveRooms', ('AveOccup', 'HouseAge')]
+plot_partial_dependence(est, X_train, features,
+                        n_jobs=3, grid_resolution=20)
+print("done in {:.3f}s".format(time() - tic))
+fig = plt.gcf()
+fig.suptitle('Partial dependence of house value on non-location features\n'
+             'for the California housing dataset, with MLPRegressor')
+fig.subplots_adjust(hspace=0.3)
+
+#En 3D
+
+fig = plt.figure()
+
+features = ('AveOccup', 'HouseAge')
+pdp, axes = partial_dependence(est, X_train, features=features,
+                               grid_resolution=20)
+
+
+fig = plt.figure()
+XX, YY = np.meshgrid(axes[0], axes[1])
+Z = pdp[0].T
+ax = Axes3D(fig)
+surf = ax.plot_surface(XX, YY, Z, rstride=1, cstride=1, cmap=plt.cm.BuPu, edgecolor='k')
+ax.set_xlabel(features[0])
+ax.set_ylabel(features[1])
+ax.set_zlabel('Partial dependence')
+#  pretty init view
+ax.view_init(elev=22, azim=122)
+plt.colorbar(surf)
+plt.suptitle('Partial dependence of house value on median\n'
+             'age and average occupancy, with Gradient Boosting')
+plt.subplots_adjust(top=0.9)
+
+plt.show()
+
+#%% PERMUTATION IMPORTANCE AND CORRELATED FEATURES
+from collections import defaultdict
+
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.stats import spearmanr
+from scipy.cluster import hierarchy
+
+from sklearn.datasets import load_breast_cancer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.inspection import permutation_importance
+from sklearn.model_selection import train_test_split
+
+#Cargar los datos
+data = load_breast_cancer()
+X, y = data.data, data.target
+X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42)
+
+clf = RandomForestClassifier(n_estimators=100, random_state=42)
+clf.fit(X_train, y_train)
+print("Accuracy on test data: {:.2f}".format(clf.score(X_test, y_test)))
+
+#Permutation importance
+result = permutation_importance(clf, X_train, y_train, n_repeats=10,
+                                random_state=42)
+perm_sorted_idx = result.importances_mean.argsort()
+
+tree_importance_sorted_idx = np.argsort(clf.feature_importances_)
+tree_indices = np.arange(0, len(clf.feature_importances_)) + 0.5
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))
+ax1.barh(tree_indices,
+         clf.feature_importances_[tree_importance_sorted_idx], height=0.7)
+ax1.set_yticklabels(data.feature_names[tree_importance_sorted_idx])
+ax1.set_yticks(tree_indices)
+ax1.set_ylim((0, len(clf.feature_importances_)))
+ax2.boxplot(result.importances[perm_sorted_idx].T, vert=False,
+            labels=data.feature_names[perm_sorted_idx])
+fig.tight_layout()
+plt.show()
+
+
+#In case of correlated features
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))
+corr = spearmanr(X).correlation
+corr_linkage = hierarchy.ward(corr)
+dendro = hierarchy.dendrogram(corr_linkage, labels=data.feature_names, ax=ax1, leaf_rotation=90)
+dendro_idx = np.arange(0, len(dendro['ivl']))
+
+ax2.imshow(corr[dendro['leaves'], :][:, dendro['leaves']])
+ax2.set_xticks(dendro_idx)
+ax2.set_yticks(dendro_idx)
+ax2.set_xticklabels(dendro['ivl'], rotation='vertical')
+ax2.set_yticklabels(dendro['ivl'])
+fig.tight_layout()
+plt.show()
+
+#Cortar el dendrograma para quedarnos solo con algunas variables
+cluster_ids = hierarchy.fcluster(corr_linkage, t=1, criterion='distance')
+cluster_id_to_feature_ids = defaultdict(list)
+for idx, cluster_id in enumerate(cluster_ids):
+    cluster_id_to_feature_ids[cluster_id].append(idx)
+selected_features = [v[0] for v in cluster_id_to_feature_ids.values()]
+
+X_train_sel = X_train[:, selected_features]
+X_test_sel = X_test[:, selected_features]
+
+clf_sel = RandomForestClassifier(n_estimators=100, random_state=42)
+clf_sel.fit(X_train_sel, y_train)
+print("Accuracy on test data with features removed: {:.2f}".format(
+      clf_sel.score(X_test_sel, y_test)))
+
 #%% Variable aleatoria
 # data(iris)
 # iris$random=runif(0, 1, n = nrow(iris))
@@ -923,6 +1100,349 @@ from sklearn.model_selection import GridSearchCV
 param_grid = dict(reduce_dim__n_components=[2, 5, 10],
                   clf__C=[0.1, 10, 100])
 grid_search = GridSearchCV(pipe, param_grid=param_grid)
+
+#%% CROSS VALIDATION
+
+import numpy as np
+from sklearn import datasets
+from sklearn import svm
+
+X, y = datasets.load_iris(return_X_y=True)
+
+from sklearn.model_selection import (cross_val_score, cross_val_predict, ShuffleSplit, KFold, RepeatedKFold, 
+                                     LeavePOut, ShuffleSplit, StratifiedShuffleSplit, StratifiedKFold)
+clf = svm.SVC(kernel='linear', C=1)
+
+#Por defecto usa Kfold o StratifiedKfold
+cross_val_score(clf, X, y, cv=5, scoring='f1_macro')
+
+#Pero puede usarse otra como ShuffleSplit
+cv = ShuffleSplit(n_splits=5, test_size=0.3, random_state=0)
+cross_val_score(clf, X, y, cv=cv)
+
+cv = KFold(n_splits=5)
+cross_val_score(clf, X, y, cv=cv)
+
+cv = RepeatedKFold(n_splits=2, n_repeats=2)
+cross_val_score(clf, X, y, cv=cv)
+
+cv = LeavePOut(p=2)
+cross_val_score(clf, X, y, cv=cv)
+
+cv = ShuffleSplit(n_splits=5, test_size=0.25)
+cross_val_score(clf, X, y, cv=cv)
+
+cv = StratifiedKFold(n_splits=2)
+cross_val_score(clf, X, y, cv=cv)
+
+cv = StratifiedShuffleSplit(n_splits=5, test_size=0.25)
+cross_val_score(clf, X, y, cv=cv)
+
+#Combinado con PipeLines
+from sklearn.pipeline import make_pipeline
+clf = make_pipeline(preprocessing.StandardScaler(), svm.SVC(C=1))
+cross_val_score(clf, X, y, cv=cv)
+
+#Para multiples metricas, usar cross_validate
+from sklearn.model_selection import cross_validate
+from sklearn.metrics import recall_score
+scoring = ['precision_macro', 'recall_macro']
+clf = svm.SVC(kernel='linear', C=1, random_state=0)
+scores = cross_validate(clf, X, y, scoring=scoring)
+sorted(scores.keys())
+scores['test_recall_macro']
+
+#Predicciones
+
+
+#%%  Exercise cross validation
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn import datasets
+from sklearn.linear_model import LassoCV
+from sklearn.linear_model import Lasso
+from sklearn.model_selection import KFold
+from sklearn.model_selection import GridSearchCV
+
+X, y = datasets.load_diabetes(return_X_y=True)
+X = X[:150]
+y = y[:150]
+
+lasso = Lasso(random_state=0, max_iter=10000)
+alphas = np.logspace(-4, -0.5, 30)
+
+tuned_parameters = [{'alpha': alphas}]
+n_folds = 5
+
+clf = GridSearchCV(lasso, tuned_parameters, cv=n_folds, refit=False)
+clf.fit(X, y)
+scores = clf.cv_results_['mean_test_score']
+scores_std = clf.cv_results_['std_test_score']
+plt.figure().set_size_inches(8, 6)
+plt.semilogx(alphas, scores)
+
+# plot error lines showing +/- std. errors of the scores
+std_error = scores_std / np.sqrt(n_folds)
+
+plt.semilogx(alphas, scores + std_error, 'b--')
+plt.semilogx(alphas, scores - std_error, 'b--')
+
+# alpha=0.2 controls the translucency of the fill color
+plt.fill_between(alphas, scores + std_error, scores - std_error, alpha=0.2)
+
+plt.ylabel('CV score +/- std error')
+plt.xlabel('alpha')
+plt.axhline(np.max(scores), linestyle='--', color='.5')
+plt.xlim([alphas[0], alphas[-1]])
+
+
+#%%Hyperparameter Tuning
+
+#Grid Search
+from sklearn import svm, datasets
+from sklearn.model_selection import GridSearchCV
+iris = datasets.load_iris()
+parameters = {'kernel':('linear', 'rbf'), 'C':[1, 5, 10]}
+svc = svm.SVC()
+
+clf = GridSearchCV(svc, parameters, cv=3, scoring = "accuracy")
+clf.fit(iris.data, iris.target)
+clf.cv_results_
+clf.best_params_
+
+#RandomizedSearch
+from sklearn.datasets import load_iris
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import RandomizedSearchCV
+from scipy.stats import uniform
+iris = load_iris()
+logistic = LogisticRegression(solver='saga', tol=1e-2, max_iter=200,random_state=0)
+distributions = dict(C=uniform(loc=0, scale=4), penalty=['l2', 'l1'])
+clf = RandomizedSearchCV(logistic, distributions, random_state=1,n_iter = 100, n_jobs=-1)
+search = clf.fit(iris.data, iris.target)
+search.best_params_
+
+#%%custom score
+from sklearn.metrics import fbeta_score, make_scorer
+import numpy as np
+from sklearn import svm, datasets
+from sklearn.model_selection import GridSearchCV
+from sklearn.svm import LinearSVC
+
+def my_custom_loss_func(y_true, y_pred):
+    diff = np.abs(y_true - y_pred).max()
+    return np.log1p(diff)
+
+score = make_scorer(my_custom_loss_func, greater_is_better=False) #creater is better, para diferenciar si es score o loss
+grid = GridSearchCV(LinearSVC(), param_grid={'C': [1, 10]}, scoring=score, cv=5)
+
+iris = datasets.load_iris()
+
+grid.fit(iris.data, iris.target)
+grid.cv_results_
+grid.best_params_
+
+#%%confusion matrix y classification report
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import classification_report
+y_true = [2, 0, 2, 2, 0, 1]
+y_pred = [0, 0, 2, 2, 0, 2]
+confusion_matrix(y_true, y_pred)
+target_names = ['class 0', 'class 1', 'class 2']
+print(classification_report(y_true, y_pred, target_names=target_names))
+
+import numpy as np
+from sklearn.metrics import multilabel_confusion_matrix
+y_true = ["cat", "ant", "cat", "cat", "ant", "bird"]
+y_pred = ["ant", "ant", "cat", "cat", "ant", "cat"]
+multilabel_confusion_matrix(y_true, y_pred, labels=["ant", "bird", "cat"])
+
+#%% Validation curve
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+from sklearn.datasets import load_digits
+from sklearn.svm import SVC
+from sklearn.model_selection import validation_curve
+
+X, y = load_digits(return_X_y=True)
+
+param_range = np.logspace(-6, -1, 5)
+train_scores, test_scores = validation_curve(SVC(), X, y, param_name="gamma", param_range=param_range, scoring="accuracy")
+train_scores_mean = np.mean(train_scores, axis=1)
+train_scores_std = np.std(train_scores, axis=1)
+test_scores_mean = np.mean(test_scores, axis=1)
+test_scores_std = np.std(test_scores, axis=1)
+
+plt.title("Validation Curve with SVM")
+plt.xlabel(r"$\gamma$")
+plt.ylabel("Score")
+plt.ylim(0.0, 1.1)
+lw = 2
+plt.semilogx(param_range, train_scores_mean, label="Training score",
+             color="darkorange", lw=lw)
+plt.fill_between(param_range, train_scores_mean - train_scores_std,
+                 train_scores_mean + train_scores_std, alpha=0.2,
+                 color="darkorange", lw=lw)
+plt.semilogx(param_range, test_scores_mean, label="Cross-validation score",
+             color="navy", lw=lw)
+plt.fill_between(param_range, test_scores_mean - test_scores_std,
+                 test_scores_mean + test_scores_std, alpha=0.2,
+                 color="navy", lw=lw)
+plt.legend(loc="best")
+plt.show()
+
+#%% Learning curve
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.naive_bayes import GaussianNB
+from sklearn.svm import SVC
+from sklearn.datasets import load_digits
+from sklearn.model_selection import learning_curve
+from sklearn.model_selection import ShuffleSplit
+
+
+def plot_learning_curve(estimator, title, X, y, axes=None, ylim=None, cv=None,
+                        n_jobs=None, train_sizes=np.linspace(.1, 1.0, 5)):
+    """
+    Generate 3 plots: the test and training learning curve, the training
+    samples vs fit times curve, the fit times vs score curve.
+
+    Parameters
+    ----------
+    estimator : object type that implements the "fit" and "predict" methods
+        An object of that type which is cloned for each validation.
+
+    title : string
+        Title for the chart.
+
+    X : array-like, shape (n_samples, n_features)
+        Training vector, where n_samples is the number of samples and
+        n_features is the number of features.
+
+    y : array-like, shape (n_samples) or (n_samples, n_features), optional
+        Target relative to X for classification or regression;
+        None for unsupervised learning.
+
+    axes : array of 3 axes, optional (default=None)
+        Axes to use for plotting the curves.
+
+    ylim : tuple, shape (ymin, ymax), optional
+        Defines minimum and maximum yvalues plotted.
+
+    cv : int, cross-validation generator or an iterable, optional
+        Determines the cross-validation splitting strategy.
+        Possible inputs for cv are:
+          - None, to use the default 5-fold cross-validation,
+          - integer, to specify the number of folds.
+          - :term:`CV splitter`,
+          - An iterable yielding (train, test) splits as arrays of indices.
+
+        For integer/None inputs, if ``y`` is binary or multiclass,
+        :class:`StratifiedKFold` used. If the estimator is not a classifier
+        or if ``y`` is neither binary nor multiclass, :class:`KFold` is used.
+
+        Refer :ref:`User Guide <cross_validation>` for the various
+        cross-validators that can be used here.
+
+    n_jobs : int or None, optional (default=None)
+        Number of jobs to run in parallel.
+        ``None`` means 1 unless in a :obj:`joblib.parallel_backend` context.
+        ``-1`` means using all processors. See :term:`Glossary <n_jobs>`
+        for more details.
+
+    train_sizes : array-like, shape (n_ticks,), dtype float or int
+        Relative or absolute numbers of training examples that will be used to
+        generate the learning curve. If the dtype is float, it is regarded as a
+        fraction of the maximum size of the training set (that is determined
+        by the selected validation method), i.e. it has to be within (0, 1].
+        Otherwise it is interpreted as absolute sizes of the training sets.
+        Note that for classification the number of samples usually have to
+        be big enough to contain at least one sample from each class.
+        (default: np.linspace(0.1, 1.0, 5))
+    """
+    if axes is None:
+        _, axes = plt.subplots(1, 3, figsize=(20, 5))
+
+    axes[0].set_title(title)
+    if ylim is not None:
+        axes[0].set_ylim(*ylim)
+    axes[0].set_xlabel("Training examples")
+    axes[0].set_ylabel("Score")
+
+    train_sizes, train_scores, test_scores, fit_times, _ = \
+        learning_curve(estimator, X, y, cv=cv, n_jobs=n_jobs,
+                       train_sizes=train_sizes,
+                       return_times=True)
+    train_scores_mean = np.mean(train_scores, axis=1)
+    train_scores_std = np.std(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    test_scores_std = np.std(test_scores, axis=1)
+    fit_times_mean = np.mean(fit_times, axis=1)
+    fit_times_std = np.std(fit_times, axis=1)
+
+    # Plot learning curve
+    axes[0].grid()
+    axes[0].fill_between(train_sizes, train_scores_mean - train_scores_std,
+                         train_scores_mean + train_scores_std, alpha=0.1,
+                         color="r")
+    axes[0].fill_between(train_sizes, test_scores_mean - test_scores_std,
+                         test_scores_mean + test_scores_std, alpha=0.1,
+                         color="g")
+    axes[0].plot(train_sizes, train_scores_mean, 'o-', color="r",
+                 label="Training score")
+    axes[0].plot(train_sizes, test_scores_mean, 'o-', color="g",
+                 label="Cross-validation score")
+    axes[0].legend(loc="best")
+
+    # Plot n_samples vs fit_times
+    axes[1].grid()
+    axes[1].plot(train_sizes, fit_times_mean, 'o-')
+    axes[1].fill_between(train_sizes, fit_times_mean - fit_times_std,
+                         fit_times_mean + fit_times_std, alpha=0.1)
+    axes[1].set_xlabel("Training examples")
+    axes[1].set_ylabel("fit_times")
+    axes[1].set_title("Scalability of the model")
+
+    # Plot fit_time vs score
+    axes[2].grid()
+    axes[2].plot(fit_times_mean, test_scores_mean, 'o-')
+    axes[2].fill_between(fit_times_mean, test_scores_mean - test_scores_std,
+                         test_scores_mean + test_scores_std, alpha=0.1)
+    axes[2].set_xlabel("fit_times")
+    axes[2].set_ylabel("Score")
+    axes[2].set_title("Performance of the model")
+
+    return plt
+
+
+fig, axes = plt.subplots(3, 2, figsize=(10, 15))
+
+X, y = load_digits(return_X_y=True)
+
+title = "Learning Curves (Naive Bayes)"
+# Cross validation with 100 iterations to get smoother mean test and train
+# score curves, each time with 20% data randomly selected as a validation set.
+cv = ShuffleSplit(n_splits=100, test_size=0.2, random_state=0)
+
+estimator = GaussianNB()
+plot_learning_curve(estimator, title, X, y, axes=axes[:, 0], ylim=(0.7, 1.01),
+                    cv=cv, n_jobs=4)
+
+title = r"Learning Curves (SVM, RBF kernel, $\gamma=0.001$)"
+# SVC is more expensive so we do a lower number of CV iterations:
+cv = ShuffleSplit(n_splits=10, test_size=0.2, random_state=0)
+estimator = SVC(gamma=0.001)
+plot_learning_curve(estimator, title, X, y, axes=axes[:, 1], ylim=(0.7, 1.01),
+                    cv=cv, n_jobs=4)
+
+plt.show()
+
+
+
 
 #%% LINEAR MODELS
 
@@ -1407,76 +1927,8 @@ plt.show()
 
 
 
-#%% LINEAR AND QUADRATIC DISCRIMINANT ANALYSIS
-#%% LDA
 
-import matplotlib.pyplot as plt
 
-from sklearn import datasets
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-
-iris = datasets.load_iris()
-
-X = iris.data
-y = iris.target
-target_names = iris.target_names
-
-lda = LinearDiscriminantAnalysis(n_components=2)
-X_r = lda.fit(X, y).transform(X)
-
-plt.figure()
-colors = ['navy', 'turquoise', 'darkorange']
-lw = 2
-
-for color, i, target_name in zip(colors, [0, 1, 2], target_names):
-    plt.scatter(X[y == i, 0], X[y == i, 1], color=color, alpha=.8, lw=lw,
-                label=target_name)
-plt.legend(loc='best', shadow=False, scatterpoints=1)
-plt.title('IRIS dataset')
-
-plt.figure()
-for color, i, target_name in zip(colors, [0, 1, 2], target_names):
-    plt.scatter(X_r[y == i, 0], X_r[y == i, 1], alpha=.8, color=color,
-                label=target_name)
-plt.legend(loc='best', shadow=False, scatterpoints=1)
-plt.title('LDA of IRIS dataset')
-
-plt.show()
-
-#%% t-SNE (menos de 50 variables. Si hay mas, hacer un pca antes)
-
-import matplotlib.pyplot as plt
-from sklearn import datasets
-import numpy as np
-from sklearn.manifold import TSNE
-
-iris = datasets.load_iris()
-
-X = iris.data
-y = iris.target
-target_names = iris.target_names
-
-lda = TSNE(n_components=2)
-X_r = lda.fit(X, y).fit_transform(X)
-
-plt.figure()
-colors = ['navy', 'turquoise', 'darkorange']
-lw = 2
-
-for color, i, target_name in zip(colors, [0, 1, 2], target_names):
-    plt.scatter(X[y == i, 0], X[y == i, 1], color=color, alpha=.8, lw=lw,
-                label=target_name)
-plt.legend(loc='best', shadow=False, scatterpoints=1)
-plt.title('IRIS dataset')
-
-plt.figure()
-for color, i, target_name in zip(colors, [0, 1, 2], target_names):
-    plt.scatter(X_r[y == i, 0], X_r[y == i, 1], alpha=.8, color=color,
-                label=target_name)
-plt.legend(loc='best', shadow=False, scatterpoints=1)
-plt.title('LDA of IRIS dataset')
-
-plt.show()
 
 
 #%% Support Vector Machine, Regression
@@ -2616,22 +3068,6 @@ print('R2 score: {:.2f}'
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #%% LABEL PROPAGATION (SEMI-SUPERVISED)
 
 import numpy as np
@@ -2808,186 +3244,9 @@ plt.legend(('Data', 'Isotonic Fit', 'Linear Fit'), loc='lower right')
 plt.title('Isotonic regression')
 plt.show()
 
-#%% Probability calibration
 
 
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib import cm
 
-from sklearn.datasets import make_blobs
-from sklearn.naive_bayes import GaussianNB
-from sklearn.metrics import brier_score_loss
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.model_selection import train_test_split
-
-
-n_samples = 50000
-n_bins = 3  # use 3 bins for calibration_curve as we have 3 clusters here
-
-# Generate 3 blobs with 2 classes where the second blob contains
-# half positive samples and half negative samples. Probability in this
-# blob is therefore 0.5.
-centers = [(-5, -5), (0, 0), (5, 5)]
-X, y = make_blobs(n_samples=n_samples, centers=centers, shuffle=False,
-                  random_state=42)
-
-y[:n_samples // 2] = 0
-y[n_samples // 2:] = 1
-sample_weight = np.random.RandomState(42).rand(y.shape[0])
-
-# split train, test for calibration
-X_train, X_test, y_train, y_test, sw_train, sw_test = \
-    train_test_split(X, y, sample_weight, test_size=0.9, random_state=42)
-
-# Gaussian Naive-Bayes with no calibration
-clf = GaussianNB()
-clf.fit(X_train, y_train)  # GaussianNB itself does not support sample-weights
-prob_pos_clf = clf.predict_proba(X_test)[:, 1]
-
-# Gaussian Naive-Bayes with isotonic calibration
-clf_isotonic = CalibratedClassifierCV(clf, cv=2, method='isotonic')
-clf_isotonic.fit(X_train, y_train, sw_train)
-prob_pos_isotonic = clf_isotonic.predict_proba(X_test)[:, 1]
-
-# Gaussian Naive-Bayes with sigmoid calibration
-clf_sigmoid = CalibratedClassifierCV(clf, cv=2, method='sigmoid')
-clf_sigmoid.fit(X_train, y_train, sw_train)
-prob_pos_sigmoid = clf_sigmoid.predict_proba(X_test)[:, 1]
-
-print("Brier scores: (the smaller the better)")
-
-clf_score = brier_score_loss(y_test, prob_pos_clf, sw_test)
-print("No calibration: %1.3f" % clf_score)
-
-clf_isotonic_score = brier_score_loss(y_test, prob_pos_isotonic, sw_test)
-print("With isotonic calibration: %1.3f" % clf_isotonic_score)
-
-clf_sigmoid_score = brier_score_loss(y_test, prob_pos_sigmoid, sw_test)
-print("With sigmoid calibration: %1.3f" % clf_sigmoid_score)
-
-# #############################################################################
-# Plot the data and the predicted probabilities
-plt.figure()
-y_unique = np.unique(y)
-colors = cm.rainbow(np.linspace(0.0, 1.0, y_unique.size))
-for this_y, color in zip(y_unique, colors):
-    this_X = X_train[y_train == this_y]
-    this_sw = sw_train[y_train == this_y]
-    plt.scatter(this_X[:, 0], this_X[:, 1], s=this_sw * 50,
-                c=color[np.newaxis, :],
-                alpha=0.5, edgecolor='k',
-                label="Class %s" % this_y)
-plt.legend(loc="best")
-plt.title("Data")
-
-plt.figure()
-order = np.lexsort((prob_pos_clf, ))
-plt.plot(prob_pos_clf[order], 'r', label='No calibration (%1.3f)' % clf_score)
-plt.plot(prob_pos_isotonic[order], 'g', linewidth=3,
-         label='Isotonic calibration (%1.3f)' % clf_isotonic_score)
-plt.plot(prob_pos_sigmoid[order], 'b', linewidth=3,
-         label='Sigmoid calibration (%1.3f)' % clf_sigmoid_score)
-plt.plot(np.linspace(0, y_test.size, 51)[1::2],
-         y_test[order].reshape(25, -1).mean(1),
-         'k', linewidth=3, label=r'Empirical')
-plt.ylim([-0.05, 1.05])
-plt.xlabel("Instances sorted according to predicted probability "
-           "(uncalibrated GNB)")
-plt.ylabel("P(y=1)")
-plt.legend(loc="upper left")
-plt.title("Gaussian naive Bayes probabilities")
-
-plt.show()
-
-
-#%% PROBABILITY CALIBRATION 2
-
-import matplotlib.pyplot as plt
-
-from sklearn import datasets
-from sklearn.naive_bayes import GaussianNB
-from sklearn.svm import LinearSVC
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (brier_score_loss, precision_score, recall_score,
-                             f1_score)
-from sklearn.calibration import CalibratedClassifierCV, calibration_curve
-from sklearn.model_selection import train_test_split
-
-
-# Create dataset of classification task with many redundant and few
-# informative features
-X, y = datasets.make_classification(n_samples=100000, n_features=20,
-                                    n_informative=2, n_redundant=10,
-                                    random_state=42)
-
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.99,
-                                                    random_state=42)
-
-
-def plot_calibration_curve(est, name, fig_index):
-    """Plot calibration curve for est w/o and with calibration. """
-    # Calibrated with isotonic calibration
-    isotonic = CalibratedClassifierCV(est, cv=2, method='isotonic')
-
-    # Calibrated with sigmoid calibration
-    sigmoid = CalibratedClassifierCV(est, cv=2, method='sigmoid')
-
-    # Logistic regression with no calibration as baseline
-    lr = LogisticRegression(C=1.)
-
-    fig = plt.figure(fig_index, figsize=(10, 10))
-    ax1 = plt.subplot2grid((3, 1), (0, 0), rowspan=2)
-    ax2 = plt.subplot2grid((3, 1), (2, 0))
-
-    ax1.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
-    for clf, name in [(lr, 'Logistic'),
-                      (est, name),
-                      (isotonic, name + ' + Isotonic'),
-                      (sigmoid, name + ' + Sigmoid')]:
-        clf.fit(X_train, y_train)
-        y_pred = clf.predict(X_test)
-        if hasattr(clf, "predict_proba"):
-            prob_pos = clf.predict_proba(X_test)[:, 1]
-        else:  # use decision function
-            prob_pos = clf.decision_function(X_test)
-            prob_pos = \
-                (prob_pos - prob_pos.min()) / (prob_pos.max() - prob_pos.min())
-
-        clf_score = brier_score_loss(y_test, prob_pos, pos_label=y.max())
-        print("%s:" % name)
-        print("\tBrier: %1.3f" % (clf_score))
-        print("\tPrecision: %1.3f" % precision_score(y_test, y_pred))
-        print("\tRecall: %1.3f" % recall_score(y_test, y_pred))
-        print("\tF1: %1.3f\n" % f1_score(y_test, y_pred))
-
-        fraction_of_positives, mean_predicted_value = \
-            calibration_curve(y_test, prob_pos, n_bins=10)
-
-        ax1.plot(mean_predicted_value, fraction_of_positives, "s-",
-                 label="%s (%1.3f)" % (name, clf_score))
-
-        ax2.hist(prob_pos, range=(0, 1), bins=10, label=name,
-                 histtype="step", lw=2)
-
-    ax1.set_ylabel("Fraction of positives")
-    ax1.set_ylim([-0.05, 1.05])
-    ax1.legend(loc="lower right")
-    ax1.set_title('Calibration plots  (reliability curve)')
-
-    ax2.set_xlabel("Mean predicted value")
-    ax2.set_ylabel("Count")
-    ax2.legend(loc="upper center", ncol=2)
-
-    plt.tight_layout()
-
-# Plot calibration curve for Gaussian Naive Bayes
-plot_calibration_curve(est=GaussianNB(), name="Naive Bayes", fig_index=1)
-
-# Plot calibration curve for Linear SVC
-plot_calibration_curve(LinearSVC(max_iter=10000), "SVC", 2)
-
-plt.show()
 
 
 #%% SUPERVISED NEURAL NETWORKS CLASSIFICATION
@@ -3264,7 +3523,38 @@ plt.show()
 
 
 
-#%% CLUSTERING
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#%% CLUSTERING, COMPARACION VARIOS CLUSTERS
 import time
 import warnings
 
@@ -3455,6 +3745,18 @@ y_pred = KMeans(n_clusters=2, random_state=random_state).fit_predict(X)
 plt.subplot(221)
 plt.scatter(X[:, 0], X[:, 1], c=y_pred)
 plt.title("Incorrect Number of Blobs")
+plt.show()
+
+Nc = range(1, 20)
+kmeans = [KMeans(n_clusters=i) for i in Nc]
+kmeans
+score = [kmeans[i].fit(X).score(X) for i in range(len(kmeans))]
+score
+plt.plot(Nc,score)
+plt.xlabel('Number of Clusters')
+plt.ylabel('Score')
+plt.title('Elbow Curve')
+plt.show()
 
 # Anisotropicly distributed data
 transformation = [[0.60834549, -0.63667341], [-0.40887718, 0.85253229]]
@@ -3826,8 +4128,15 @@ X, labels_true = make_blobs(n_samples=750, centers=centers, cluster_std=0.4,
 X = StandardScaler().fit_transform(X)
 
 # #############################################################################
+# Estimar eps
+from sklearn.neighbors import NearestNeighbors
+neigh = NearestNeighbors(n_neighbors=2).fit(X)
+distances, indices = neigh.kneighbors(X)
+distances = np.sort(distances, axis=0)
+distances = distances[:,1]
+plt.plot(distances)
 # Compute DBSCAN
-db = DBSCAN(eps=0.3, min_samples=10).fit(X)
+db = DBSCAN(eps=0.15, min_samples=10).fit(X)
 core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
 core_samples_mask[db.core_sample_indices_] = True
 labels = db.labels_
@@ -3841,12 +4150,9 @@ print('Estimated number of noise points: %d' % n_noise_)
 print("Homogeneity: %0.3f" % metrics.homogeneity_score(labels_true, labels))
 print("Completeness: %0.3f" % metrics.completeness_score(labels_true, labels))
 print("V-measure: %0.3f" % metrics.v_measure_score(labels_true, labels))
-print("Adjusted Rand Index: %0.3f"
-      % metrics.adjusted_rand_score(labels_true, labels))
-print("Adjusted Mutual Information: %0.3f"
-      % metrics.adjusted_mutual_info_score(labels_true, labels))
-print("Silhouette Coefficient: %0.3f"
-      % metrics.silhouette_score(X, labels))
+print("Adjusted Rand Index: %0.3f"% metrics.adjusted_rand_score(labels_true, labels))
+print("Adjusted Mutual Information: %0.3f"% metrics.adjusted_mutual_info_score(labels_true, labels))
+print("Silhouette Coefficient: %0.3f"% metrics.silhouette_score(X, labels))
 
 # #############################################################################
 # Plot result
@@ -3875,9 +4181,11 @@ plt.title('Estimated number of clusters: %d' % n_clusters_)
 plt.show()
 
 #Representacion facil
+plt.subplot(1, 2, 1)
 plt.scatter(X[:,0], X[:,1], c=labels_true)
+plt.subplot(1, 2, 2)
 plt.scatter(X[:,0], X[:,1], c=labels)
-
+plt.show()
 
 #%% OPTICS
 from sklearn.cluster import OPTICS, cluster_optics_dbscan
@@ -3906,13 +4214,15 @@ clust.fit(X)
 labels_050 = cluster_optics_dbscan(reachability=clust.reachability_,
                                    core_distances=clust.core_distances_,
                                    ordering=clust.ordering_, eps=0.5)
+labels_050 = DBSCAN(eps=0.5, min_samples=50).fit(X).labels_ #quivalente
 labels_200 = cluster_optics_dbscan(reachability=clust.reachability_,
                                    core_distances=clust.core_distances_,
                                    ordering=clust.ordering_, eps=2)
-
+labels_200 = DBSCAN(eps=2, min_samples=50).fit(X).labels_ #equivalente
 space = np.arange(len(X))
 reachability = clust.reachability_[clust.ordering_]
 labels = clust.labels_[clust.ordering_]
+plt.scatter(np.arange(len(reachability)), reachability, c=labels)
 
 #PLOT
 plt.figure(figsize=(10, 7))
@@ -3933,6 +4243,7 @@ ax1.plot(space, np.full_like(space, 2., dtype=float), 'k-', alpha=0.5)
 ax1.plot(space, np.full_like(space, 0.5, dtype=float), 'k-.', alpha=0.5)
 ax1.set_ylabel('Reachability (epsilon distance)')
 ax1.set_title('Reachability Plot')
+plt.show()
 
 # OPTICS
 colors = ['g.', 'r.', 'b.', 'y.', 'c.']
@@ -3960,6 +4271,846 @@ ax4.set_title('Clustering at 2.0 epsilon cut\nDBSCAN')
 
 plt.tight_layout()
 plt.show()
+
+#%% Spectral clustering
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.cluster import SpectralClustering
+
+# Generate sample data
+
+np.random.seed(0)
+n_points_per_cluster = 250
+
+C1 = [-5, -2] + .8 * np.random.randn(n_points_per_cluster, 2)
+C2 = [4, -1] + .1 * np.random.randn(n_points_per_cluster, 2)
+C3 = [1, -2] + .2 * np.random.randn(n_points_per_cluster, 2)
+C4 = [-2, 3] + .3 * np.random.randn(n_points_per_cluster, 2)
+C5 = [3, -2] + 1.6 * np.random.randn(n_points_per_cluster, 2)
+C6 = [5, 6] + 2 * np.random.randn(n_points_per_cluster, 2)
+X = np.vstack((C1, C2, C3, C4, C5, C6))
+
+labels = SpectralClustering(n_clusters=6, eigen_solver='arpack', affinity="nearest_neighbors").fit(X).labels_
+plt.scatter(X[:,0], X[:,1], c=labels)
+
+
+
+#%% Gaussian Mixture 
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+
+import numpy as np
+
+from sklearn import datasets
+from sklearn.mixture import GaussianMixture
+from sklearn.model_selection import StratifiedKFold
+
+print(__doc__)
+
+colors = ['navy', 'turquoise', 'darkorange']
+
+
+def make_ellipses(gmm, ax):
+    for n, color in enumerate(colors):
+        if gmm.covariance_type == 'full':
+            covariances = gmm.covariances_[n][:2, :2]
+        elif gmm.covariance_type == 'tied':
+            covariances = gmm.covariances_[:2, :2]
+        elif gmm.covariance_type == 'diag':
+            covariances = np.diag(gmm.covariances_[n][:2])
+        elif gmm.covariance_type == 'spherical':
+            covariances = np.eye(gmm.means_.shape[1]) * gmm.covariances_[n]
+        v, w = np.linalg.eigh(covariances)
+        u = w[0] / np.linalg.norm(w[0])
+        angle = np.arctan2(u[1], u[0])
+        angle = 180 * angle / np.pi  # convert to degrees
+        v = 2. * np.sqrt(2.) * np.sqrt(v)
+        ell = mpl.patches.Ellipse(gmm.means_[n, :2], v[0], v[1],
+                                  180 + angle, color=color)
+        ell.set_clip_box(ax.bbox)
+        ell.set_alpha(0.5)
+        ax.add_artist(ell)
+        ax.set_aspect('equal', 'datalim')
+
+iris = datasets.load_iris()
+
+# Break up the dataset into non-overlapping training (75%) and testing
+# (25%) sets.
+skf = StratifiedKFold(n_splits=4)
+# Only take the first fold.
+train_index, test_index = next(iter(skf.split(iris.data, iris.target)))
+
+
+X_train = iris.data[train_index]
+y_train = iris.target[train_index]
+X_test = iris.data[test_index]
+y_test = iris.target[test_index]
+
+n_classes = len(np.unique(y_train))
+
+# Try GMMs using different types of covariances.
+estimators = {cov_type: GaussianMixture(n_components=n_classes,
+              covariance_type=cov_type, max_iter=20, random_state=0)
+              for cov_type in ['spherical', 'diag', 'tied', 'full']}
+
+n_estimators = len(estimators)
+
+plt.figure(figsize=(3 * n_estimators // 2, 6))
+plt.subplots_adjust(bottom=.01, top=0.95, hspace=.15, wspace=.05,
+                    left=.01, right=.99)
+
+
+for index, (name, estimator) in enumerate(estimators.items()):
+    # Since we have class labels for the training data, we can
+    # initialize the GMM parameters in a supervised manner.
+    estimator.means_init = np.array([X_train[y_train == i].mean(axis=0)
+                                    for i in range(n_classes)])
+
+    # Train the other parameters using the EM algorithm.
+    estimator.fit(X_train)
+
+    h = plt.subplot(2, n_estimators // 2, index + 1)
+    make_ellipses(estimator, h)
+
+    for n, color in enumerate(colors):
+        data = iris.data[iris.target == n]
+        plt.scatter(data[:, 0], data[:, 1], s=0.8, color=color,
+                    label=iris.target_names[n])
+    # Plot the test data with crosses
+    for n, color in enumerate(colors):
+        data = X_test[y_test == n]
+        plt.scatter(data[:, 0], data[:, 1], marker='x', color=color)
+
+    y_train_pred = estimator.predict(X_train)
+    train_accuracy = np.mean(y_train_pred.ravel() == y_train.ravel()) * 100
+    plt.text(0.05, 0.9, 'Train accuracy: %.1f' % train_accuracy,
+             transform=h.transAxes)
+
+    y_test_pred = estimator.predict(X_test)
+    test_accuracy = np.mean(y_test_pred.ravel() == y_test.ravel()) * 100
+    plt.text(0.05, 0.8, 'Test accuracy: %.1f' % test_accuracy,
+             transform=h.transAxes)
+
+    plt.xticks(())
+    plt.yticks(())
+    plt.title(name)
+
+plt.legend(scatterpoints=1, loc='lower right', prop=dict(size=12))
+
+
+plt.show()
+
+#%% Select number of clusters in Bayesina Gaussina Mixture
+
+import numpy as np
+import itertools
+
+from scipy import linalg
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+import numpy as np
+from sklearn import mixture
+
+# Number of samples per component
+n_samples = 500
+
+# Generate random sample, two components
+np.random.seed(0)
+C = np.array([[0., -0.1], [1.7, .4]])
+X = np.r_[np.dot(np.random.randn(n_samples, 2), C),
+          .7 * np.random.randn(n_samples, 2) + np.array([-6, 3])]
+
+lowest_bic = np.infty
+bic = []
+n_components_range = range(1, 7)
+cv_types = ['spherical', 'tied', 'diag', 'full']
+for cv_type in cv_types:
+    for n_components in n_components_range:
+        # Fit a Gaussian mixture with EM
+        gmm = mixture.GaussianMixture(n_components=n_components,
+                                      covariance_type=cv_type)
+        gmm.fit(X)
+        bic.append(gmm.bic(X))
+        if bic[-1] < lowest_bic:
+            lowest_bic = bic[-1]
+            best_gmm = gmm
+
+bic = np.array(bic)
+color_iter = itertools.cycle(['navy', 'turquoise', 'cornflowerblue','darkorange'])
+clf = best_gmm
+bars = []
+
+# Plot the BIC scores
+plt.figure(figsize=(8, 6))
+spl = plt.subplot(2, 1, 1)
+for i, (cv_type, color) in enumerate(zip(cv_types, color_iter)):
+    xpos = np.array(n_components_range) + .2 * (i - 2)
+    bars.append(plt.bar(xpos, bic[i * len(n_components_range):
+                                  (i + 1) * len(n_components_range)],
+                        width=.2, color=color))
+plt.xticks(n_components_range)
+plt.ylim([bic.min() * 1.01 - .01 * bic.max(), bic.max()])
+plt.title('BIC score per model')
+xpos = np.mod(bic.argmin(), len(n_components_range)) + .65 +\
+    .2 * np.floor(bic.argmin() / len(n_components_range))
+plt.text(xpos, bic.min() * 0.97 + .03 * bic.max(), '*', fontsize=14)
+spl.set_xlabel('Number of components')
+spl.legend([b[0] for b in bars], cv_types)
+
+# Plot the winner
+splot = plt.subplot(2, 1, 2)
+Y_ = clf.predict(X)
+for i, (mean, cov, color) in enumerate(zip(clf.means_, clf.covariances_,
+                                           color_iter)):
+    v, w = linalg.eigh(cov)
+    if not np.any(Y_ == i):
+        continue
+    plt.scatter(X[Y_ == i, 0], X[Y_ == i, 1], .8, color=color)
+
+    # Plot an ellipse to show the Gaussian component
+    angle = np.arctan2(w[0][1], w[0][0])
+    angle = 180. * angle / np.pi  # convert to degrees
+    v = 2. * np.sqrt(2.) * np.sqrt(v)
+    ell = mpl.patches.Ellipse(mean, v[0], v[1], 180. + angle, color=color)
+    ell.set_clip_box(splot.bbox)
+    ell.set_alpha(.5)
+    splot.add_artist(ell)
+
+plt.xticks(())
+plt.yticks(())
+plt.title('Selected GMM: full model, 2 components')
+plt.subplots_adjust(hspace=.35, bottom=.02)
+plt.show()
+
+#%% Bayesian Gaussian Mixture
+import itertools
+
+import numpy as np
+from scipy import linalg
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+
+from sklearn import mixture
+
+color_iter = itertools.cycle(['navy', 'c', 'cornflowerblue', 'gold',
+                              'darkorange'])
+
+
+def plot_results(X, Y_, means, covariances, index, title):
+    splot = plt.subplot(2, 1, 1 + index)
+    for i, (mean, covar, color) in enumerate(zip(
+            means, covariances, color_iter)):
+        v, w = linalg.eigh(covar)
+        v = 2. * np.sqrt(2.) * np.sqrt(v)
+        u = w[0] / linalg.norm(w[0])
+        # as the DP will not use every component it has access to
+        # unless it needs it, we shouldn't plot the redundant
+        # components.
+        if not np.any(Y_ == i):
+            continue
+        plt.scatter(X[Y_ == i, 0], X[Y_ == i, 1], .8, color=color)
+
+        # Plot an ellipse to show the Gaussian component
+        angle = np.arctan(u[1] / u[0])
+        angle = 180. * angle / np.pi  # convert to degrees
+        ell = mpl.patches.Ellipse(mean, v[0], v[1], 180. + angle, color=color)
+        ell.set_clip_box(splot.bbox)
+        ell.set_alpha(0.5)
+        splot.add_artist(ell)
+
+    plt.xlim(-9., 5.)
+    plt.ylim(-3., 6.)
+    plt.xticks(())
+    plt.yticks(())
+    plt.title(title)
+
+
+# Number of samples per component
+n_samples = 500
+
+# Generate random sample, two components
+np.random.seed(0)
+C = np.array([[0., -0.1], [1.7, .4]])
+X = np.r_[np.dot(np.random.randn(n_samples, 2), C),
+          .7 * np.random.randn(n_samples, 2) + np.array([-6, 3])]
+
+# Fit a Gaussian mixture with EM using five components
+gmm = mixture.GaussianMixture(n_components=5, covariance_type='full').fit(X)
+plot_results(X, gmm.predict(X), gmm.means_, gmm.covariances_, 0, 'Gaussian Mixture')
+
+# Fit a Dirichlet process Gaussian mixture using five components
+dpgmm = mixture.BayesianGaussianMixture(n_components=5, covariance_type='full').fit(X)
+plot_results(X, dpgmm.predict(X), dpgmm.means_, dpgmm.covariances_, 1, 'Bayesian Gaussian Mixture with a Dirichlet process prior')
+
+plt.show()
+
+#%% Birch
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.cluster import Birch
+
+# Generate sample data
+
+np.random.seed(0)
+n_points_per_cluster = 250
+
+C1 = [-5, -2] + .8 * np.random.randn(n_points_per_cluster, 2)
+C2 = [4, -1] + .1 * np.random.randn(n_points_per_cluster, 2)
+C3 = [1, -2] + .2 * np.random.randn(n_points_per_cluster, 2)
+C4 = [-2, 3] + .3 * np.random.randn(n_points_per_cluster, 2)
+C5 = [3, -2] + 1.6 * np.random.randn(n_points_per_cluster, 2)
+C6 = [5, 6] + 2 * np.random.randn(n_points_per_cluster, 2)
+X = np.vstack((C1, C2, C3, C4, C5, C6))
+
+labels = Birch(n_clusters=6).fit(X).labels_
+plt.scatter(X[:,0], X[:,1], c=labels)
+
+#%% k-medoids
+
+from pyclustering.cluster.kmedoids import kmedoids
+from pyclustering.cluster import cluster_visualizer
+from pyclustering.utils import read_sample
+from pyclustering.samples.definitions import FCPS_SAMPLES
+# Load list of points for cluster analysis.
+sample = read_sample(FCPS_SAMPLES.SAMPLE_TWO_DIAMONDS)
+# Set random initial medoids.
+initial_medoids = [1, 500]
+# Create instance of K-Medoids algorithm.
+kmedoids_instance = kmedoids(sample, initial_medoids)
+# Run cluster analysis and obtain results.
+kmedoids_instance.process()
+clusters = kmedoids_instance.get_clusters()
+# Show allocated clusters.
+print(clusters)
+# Display clusters.
+visualizer = cluster_visualizer()
+visualizer.append_clusters(clusters, sample)
+visualizer.show()
+
+#%% Kohonen
+
+#%% COCLUSTERING
+import numpy as np
+from matplotlib import pyplot as plt
+
+from sklearn.datasets import make_biclusters
+from sklearn.cluster import SpectralCoclustering
+from sklearn.metrics import consensus_score
+
+data, rows, columns = make_biclusters(
+    shape=(300, 300), n_clusters=5, noise=5,
+    shuffle=False, random_state=0)
+
+plt.matshow(data, cmap=plt.cm.Blues)
+plt.title("Original dataset")
+
+# shuffle clusters
+rng = np.random.RandomState(0)
+row_idx = rng.permutation(data.shape[0])
+col_idx = rng.permutation(data.shape[1])
+data = data[row_idx][:, col_idx]
+
+plt.matshow(data, cmap=plt.cm.Blues)
+plt.title("Shuffled dataset")
+
+model = SpectralCoclustering(n_clusters=5, random_state=0)
+model.fit(data)
+score = consensus_score(model.biclusters_,
+                        (rows[:, row_idx], columns[:, col_idx]))
+
+print("consensus score: {:.3f}".format(score))
+
+fit_data = data[np.argsort(model.row_labels_)]
+fit_data = fit_data[:, np.argsort(model.column_labels_)]
+
+plt.matshow(fit_data, cmap=plt.cm.Blues)
+plt.title("After biclustering; rearranged to show biclusters")
+
+plt.show()
+
+
+
+#%% Bernouilli Restricted Boltzman Machine
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+from scipy.ndimage import convolve
+from sklearn import linear_model, datasets, metrics
+from sklearn.model_selection import train_test_split
+from sklearn.neural_network import BernoulliRBM
+from sklearn.pipeline import Pipeline
+from sklearn.base import clone
+
+
+# #############################################################################
+# Setting up
+
+def nudge_dataset(X, Y):
+    """
+    This produces a dataset 5 times bigger than the original one,
+    by moving the 8x8 images in X around by 1px to left, right, down, up
+    """
+    direction_vectors = [
+        [[0, 1, 0],
+         [0, 0, 0],
+         [0, 0, 0]],
+
+        [[0, 0, 0],
+         [1, 0, 0],
+         [0, 0, 0]],
+
+        [[0, 0, 0],
+         [0, 0, 1],
+         [0, 0, 0]],
+
+        [[0, 0, 0],
+         [0, 0, 0],
+         [0, 1, 0]]]
+
+    def shift(x, w):
+        return convolve(x.reshape((8, 8)), mode='constant', weights=w).ravel()
+
+    X = np.concatenate([X] +
+                       [np.apply_along_axis(shift, 1, X, vector)
+                        for vector in direction_vectors])
+    Y = np.concatenate([Y for _ in range(5)], axis=0)
+    return X, Y
+
+
+# Load Data
+X, y = datasets.load_digits(return_X_y=True)
+X = np.asarray(X, 'float32')
+X, Y = nudge_dataset(X, y)
+X = (X - np.min(X, 0)) / (np.max(X, 0) + 0.0001)  # 0-1 scaling
+
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=0)
+
+# Models we will use
+logistic = linear_model.LogisticRegression(solver='newton-cg', tol=1)
+rbm = BernoulliRBM(random_state=0, verbose=True)
+
+rbm_features_classifier = Pipeline(
+    steps=[('rbm', rbm), ('logistic', logistic)])
+
+# #############################################################################
+# Training
+
+# Hyper-parameters. These were set by cross-validation,
+# using a GridSearchCV. Here we are not performing cross-validation to
+# save time.
+rbm.learning_rate = 0.06
+rbm.n_iter = 10
+# More components tend to give better prediction performance, but larger
+# fitting time
+rbm.n_components = 100
+logistic.C = 6000
+
+# Training RBM-Logistic Pipeline
+rbm_features_classifier.fit(X_train, Y_train)
+
+# Training the Logistic regression classifier directly on the pixel
+raw_pixel_classifier = clone(logistic)
+raw_pixel_classifier.C = 100.
+raw_pixel_classifier.fit(X_train, Y_train)
+
+# #############################################################################
+# Evaluation
+
+Y_pred = rbm_features_classifier.predict(X_test)
+print("Logistic regression using RBM features:\n%s\n" % (
+    metrics.classification_report(Y_test, Y_pred)))
+
+Y_pred = raw_pixel_classifier.predict(X_test)
+print("Logistic regression using raw pixel features:\n%s\n" % (
+    metrics.classification_report(Y_test, Y_pred)))
+
+# #############################################################################
+# Plotting
+
+plt.figure(figsize=(4.2, 4))
+for i, comp in enumerate(rbm.components_):
+    plt.subplot(10, 10, i + 1)
+    plt.imshow(comp.reshape((8, 8)), cmap=plt.cm.gray_r,
+               interpolation='nearest')
+    plt.xticks(())
+    plt.yticks(())
+plt.suptitle('100 components extracted by RBM', fontsize=16)
+plt.subplots_adjust(0.08, 0.02, 0.92, 0.85, 0.08, 0.23)
+
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#%% DIMENSIONALITY REDUCTION
+from time import time
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import offsetbox
+from sklearn import (manifold, datasets, decomposition, ensemble,
+                     discriminant_analysis, random_projection, neighbors)
+print(__doc__)
+
+digits = datasets.load_digits(n_class=6)
+X = digits.data
+y = digits.target
+n_samples, n_features = X.shape
+n_neighbors = 30
+
+
+# ----------------------------------------------------------------------
+# Scale and visualize the embedding vectors
+def plot_embedding(X, title=None):
+    x_min, x_max = np.min(X, 0), np.max(X, 0)
+    X = (X - x_min) / (x_max - x_min)
+
+    plt.figure()
+    ax = plt.subplot(111)
+    for i in range(X.shape[0]):
+        plt.text(X[i, 0], X[i, 1], str(y[i]),
+                 color=plt.cm.Set1(y[i] / 10.),
+                 fontdict={'weight': 'bold', 'size': 9})
+
+    if hasattr(offsetbox, 'AnnotationBbox'):
+        # only print thumbnails with matplotlib > 1.0
+        shown_images = np.array([[1., 1.]])  # just something big
+        for i in range(X.shape[0]):
+            dist = np.sum((X[i] - shown_images) ** 2, 1)
+            if np.min(dist) < 4e-3:
+                # don't show points that are too close
+                continue
+            shown_images = np.r_[shown_images, [X[i]]]
+            imagebox = offsetbox.AnnotationBbox(
+                offsetbox.OffsetImage(digits.images[i], cmap=plt.cm.gray_r),
+                X[i])
+            ax.add_artist(imagebox)
+    plt.xticks([]), plt.yticks([])
+    if title is not None:
+        plt.title(title)
+
+
+# ----------------------------------------------------------------------
+# Plot images of the digits
+n_img_per_row = 20
+img = np.zeros((10 * n_img_per_row, 10 * n_img_per_row))
+for i in range(n_img_per_row):
+    ix = 10 * i + 1
+    for j in range(n_img_per_row):
+        iy = 10 * j + 1
+        img[ix:ix + 8, iy:iy + 8] = X[i * n_img_per_row + j].reshape((8, 8))
+
+plt.imshow(img, cmap=plt.cm.binary)
+plt.xticks([])
+plt.yticks([])
+plt.title('A selection from the 64-dimensional digits dataset')
+
+
+# ----------------------------------------------------------------------
+# Random 2D projection using a random unitary matrix
+print("Computing random projection")
+rp = random_projection.SparseRandomProjection(n_components=2, random_state=42)
+X_projected = rp.fit_transform(X)
+plot_embedding(X_projected, "Random Projection of the digits")
+
+
+# ----------------------------------------------------------------------
+# Projection on to the first 2 principal components
+#PCA substracts de mean, unlike SVD. If your features are least sensitive (informative) 
+#towards the mean of the distribution, then it makes sense to subtract the mean. 
+#If the features are most sensitive towards the high values, then subtracting the mean does not make sense.
+
+print("Computing PCA projection")
+t0 = time()
+X_svd = decomposition.TruncatedSVD(n_components=2).fit_transform(X)
+X_pca = decomposition.PCA(n_components=2).fit_transform(X) #center but doest not scale data before aplying SVD
+X_ipca = decomposition.IncrementalPCA(n_components=2).fit_transform(X) #for large dataset that do not fit in memory
+plot_embedding(X_svd, "Singular value decomposition projection of the digits ")
+plot_embedding(X_pca, "Principal Components projection of the digits ")
+plot_embedding(X_ipca, "Incremental Principal Components projection of the digits ")
+
+# ----------------------------------------------------------------------
+# Projection on to the first 2 linear discriminant components
+
+print("Computing Linear Discriminant Analysis projection")
+X2 = X.copy()
+X2.flat[::X.shape[1] + 1] += 0.01  # Make X invertible. Creo que no es necesario
+t0 = time()
+X_lda = discriminant_analysis.LinearDiscriminantAnalysis(n_components=2).fit_transform(X2, y)
+plot_embedding(X_lda,"Linear Discriminant projection of the digits (time %.2fs)" % (time() - t0))
+
+
+# ----------------------------------------------------------------------
+# Isomap projection of the digits dataset
+print("Computing Isomap projection")
+t0 = time()
+X_iso = manifold.Isomap(n_neighbors, n_components=2).fit_transform(X)
+print("Done.")
+plot_embedding(X_iso, "Isomap projection of the digits (time %.2fs)" %(time() - t0))
+
+
+# ----------------------------------------------------------------------
+# Locally linear embedding of the digits dataset
+print("Computing LLE embedding")
+clf = manifold.LocallyLinearEmbedding(n_neighbors, n_components=2, method='standard')
+t0 = time()
+X_lle = clf.fit_transform(X)
+print("Done. Reconstruction error: %g" % clf.reconstruction_error_)
+plot_embedding(X_lle, "Locally Linear Embedding of the digits (time %.2fs)" %(time() - t0))
+
+
+# ----------------------------------------------------------------------
+# Modified Locally linear embedding of the digits dataset
+print("Computing modified LLE embedding")
+clf = manifold.LocallyLinearEmbedding(n_neighbors, n_components=2,method='modified')
+t0 = time()
+X_mlle = clf.fit_transform(X)
+print("Done. Reconstruction error: %g" % clf.reconstruction_error_)
+plot_embedding(X_mlle, "Modified Locally Linear Embedding of the digits (time %.2fs)" %(time() - t0))
+
+
+# ----------------------------------------------------------------------
+# HLLE embedding of the digits dataset
+#Requires: n_neighbors > n_components * (n_components + 3) / 2
+print("Computing Hessian LLE embedding")
+clf = manifold.LocallyLinearEmbedding(n_neighbors, n_components=2,  method='hessian')
+t0 = time()
+X_hlle = clf.fit_transform(X)
+print("Done. Reconstruction error: %g" % clf.reconstruction_error_)
+plot_embedding(X_hlle, "Hessian Locally Linear Embedding of the digits (time %.2fs)" %(time() - t0))
+
+
+# ----------------------------------------------------------------------
+# LTSA embedding of the digits dataset
+print("Computing LTSA embedding")
+clf = manifold.LocallyLinearEmbedding(n_neighbors, n_components=2,  method='ltsa')
+t0 = time()
+X_ltsa = clf.fit_transform(X)
+print("Done. Reconstruction error: %g" % clf.reconstruction_error_)
+plot_embedding(X_ltsa, "Local Tangent Space Alignment of the digits (time %.2fs)" %
+               (time() - t0))
+
+# ----------------------------------------------------------------------
+# MDS  embedding of the digits dataset
+print("Computing MDS embedding")
+clf = manifold.MDS(n_components=2, n_init=1, max_iter=100)
+t0 = time()
+X_mds = clf.fit_transform(X)
+print("Done. Stress: %f" % clf.stress_)
+plot_embedding(X_mds, "MDS embedding of the digits (time %.2fs)" % (time() - t0))
+
+# ----------------------------------------------------------------------
+# Random Trees embedding of the digits dataset
+print("Computing Totally Random Trees embedding")
+RTE = ensemble.RandomTreesEmbedding(n_estimators=200, random_state=0, max_depth=5).fit_transform(X)
+X_reduced  = decomposition.TruncatedSVD(n_components=2).fit_transform(RTE)
+
+
+plot_embedding(X_reduced, "Random forest embedding of the digits")
+
+# ----------------------------------------------------------------------
+# Spectral embedding of the digits dataset
+print("Computing Spectral embedding")
+embedder = manifold.SpectralEmbedding(n_components=2, random_state=0, eigen_solver="arpack")
+t0 = time()
+X_se = embedder.fit_transform(X)
+
+plot_embedding(X_se,"Spectral embedding of the digits (time %.2fs)" %(time() - t0))
+
+# ----------------------------------------------------------------------
+# t-SNE embedding of the digits dataset
+print("Computing t-SNE embedding")
+tsne = manifold.TSNE(n_components=2, init='pca', random_state=0)
+t0 = time()
+X_tsne = tsne.fit_transform(X)
+
+plot_embedding(X_tsne, "t-SNE embedding of the digits (time %.2fs)" %(time() - t0))
+
+# ----------------------------------------------------------------------
+# NCA projection of the digits dataset
+print("Computing NCA projection")
+nca = neighbors.NeighborhoodComponentsAnalysis(init='random', n_components=2, random_state=0)
+t0 = time()
+X_nca = nca.fit_transform(X, y)
+
+plot_embedding(X_nca,"NCA embedding of the digits (time %.2fs)" %(time() - t0))
+
+
+# ----------------------------------------------------------------------
+# NCA projection of the digits dataset
+print("Computing ICA projection")
+ica = decomposition.FastICA(n_components=2)
+X_ica = ica.fit_transform(X)
+
+plot_embedding(X_nca,"ICA embedding of the digits ")
+
+#-----------------------------------------------------------------------
+# Feature Agglomeration
+import numpy as np
+from sklearn import datasets, cluster
+digits = datasets.load_digits()
+images = digits.images
+X = np.reshape(images, (len(images), -1))
+agglo = cluster.FeatureAgglomeration(n_clusters=32)
+agglo.fit(X)
+
+X_reduced = agglo.transform(X)
+X_reduced.shape
+
+#%% Kernel PCA
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.decomposition import PCA, KernelPCA
+from sklearn.datasets import make_circles
+
+np.random.seed(0)
+
+X, y = make_circles(n_samples=400, factor=.3, noise=.05)
+
+kpca = KernelPCA(kernel="rbf", fit_inverse_transform=True, gamma=10)
+X_kpca = kpca.fit_transform(X)
+X_back = kpca.inverse_transform(X_kpca)
+pca = PCA()
+X_pca = pca.fit_transform(X)
+
+# Plot results
+
+plt.figure()
+plt.subplot(2, 2, 1, aspect='equal')
+plt.title("Original space")
+reds = y == 0
+blues = y == 1
+
+plt.scatter(X[reds, 0], X[reds, 1], c="red",
+            s=20, edgecolor='k')
+plt.scatter(X[blues, 0], X[blues, 1], c="blue",
+            s=20, edgecolor='k')
+plt.xlabel("$x_1$")
+plt.ylabel("$x_2$")
+
+X1, X2 = np.meshgrid(np.linspace(-1.5, 1.5, 50), np.linspace(-1.5, 1.5, 50))
+X_grid = np.array([np.ravel(X1), np.ravel(X2)]).T
+# projection on the first principal component (in the phi space)
+Z_grid = kpca.transform(X_grid)[:, 0].reshape(X1.shape)
+plt.contour(X1, X2, Z_grid, colors='grey', linewidths=1, origin='lower')
+
+plt.subplot(2, 2, 2, aspect='equal')
+plt.scatter(X_pca[reds, 0], X_pca[reds, 1], c="red",
+            s=20, edgecolor='k')
+plt.scatter(X_pca[blues, 0], X_pca[blues, 1], c="blue",
+            s=20, edgecolor='k')
+plt.title("Projection by PCA")
+plt.xlabel("1st principal component")
+plt.ylabel("2nd component")
+
+plt.subplot(2, 2, 3, aspect='equal')
+plt.scatter(X_kpca[reds, 0], X_kpca[reds, 1], c="red",
+            s=20, edgecolor='k')
+plt.scatter(X_kpca[blues, 0], X_kpca[blues, 1], c="blue",
+            s=20, edgecolor='k')
+plt.title("Projection by KPCA")
+plt.xlabel(r"1st principal component in space induced by $\phi$")
+plt.ylabel("2nd component")
+
+plt.subplot(2, 2, 4, aspect='equal')
+plt.scatter(X_back[reds, 0], X_back[reds, 1], c="red",
+            s=20, edgecolor='k')
+plt.scatter(X_back[blues, 0], X_back[blues, 1], c="blue",
+            s=20, edgecolor='k')
+plt.title("Original space after inverse transform")
+plt.xlabel("$x_1$")
+plt.ylabel("$x_2$")
+
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 #%% OUTLIERS
@@ -4216,3 +5367,551 @@ plt.show()
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#%% MODEL EVALUATION: PROBABILITY CALIBRATION 2
+
+import matplotlib.pyplot as plt
+
+from sklearn import datasets
+from sklearn.naive_bayes import GaussianNB
+from sklearn.svm import LinearSVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (brier_score_loss, precision_score, recall_score,
+                             f1_score)
+from sklearn.calibration import CalibratedClassifierCV, calibration_curve
+from sklearn.model_selection import train_test_split
+
+
+# Create dataset of classification task with many redundant and few
+# informative features
+X, y = datasets.make_classification(n_samples=100000, n_features=20,
+                                    n_informative=2, n_redundant=10,
+                                    random_state=42)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.99, random_state=42)
+
+
+def plot_calibration_curve(est, name, fig_index):
+    """Plot calibration curve for est w/o and with calibration. """
+    # Calibrated with isotonic calibration
+    isotonic = CalibratedClassifierCV(est, cv=2, method='isotonic')
+
+    # Calibrated with sigmoid calibration
+    sigmoid = CalibratedClassifierCV(est, cv=2, method='sigmoid')
+
+    # Logistic regression with no calibration as baseline
+    lr = LogisticRegression(C=1.)
+
+    fig = plt.figure(fig_index, figsize=(10, 10))
+    ax1 = plt.subplot2grid((3, 1), (0, 0), rowspan=2)
+    ax2 = plt.subplot2grid((3, 1), (2, 0))
+
+    ax1.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
+    for clf, name in [(lr, 'Logistic'),(est, name),(isotonic, name + ' + Isotonic'),(sigmoid, name + ' + Sigmoid')]:
+        #Para cada modelo, entrenamos y predecimos                                                              
+        clf.fit(X_train, y_train)
+        y_pred = clf.predict(X_test)
+        if hasattr(clf, "predict_proba"):
+            prob_pos = clf.predict_proba(X_test)[:, 1]
+        else:  # use decision function
+            prob_pos = clf.decision_function(X_test)
+            prob_pos = \
+                (prob_pos - prob_pos.min()) / (prob_pos.max() - prob_pos.min())
+
+        clf_score = brier_score_loss(y_test, prob_pos, pos_label=y.max())
+        print("%s:" % name)
+        print("\tBrier: %1.3f" % (clf_score))
+        print("\tPrecision: %1.3f" % precision_score(y_test, y_pred))
+        print("\tRecall: %1.3f" % recall_score(y_test, y_pred))
+        print("\tF1: %1.3f\n" % f1_score(y_test, y_pred))
+
+        fraction_of_positives, mean_predicted_value = \
+            calibration_curve(y_test, prob_pos, n_bins=10)
+
+        ax1.plot(mean_predicted_value, fraction_of_positives, "s-",
+                 label="%s (%1.3f)" % (name, clf_score))
+
+        ax2.hist(prob_pos, range=(0, 1), bins=10, label=name,
+                 histtype="step", lw=2)
+
+    ax1.set_ylabel("Fraction of positives")
+    ax1.set_ylim([-0.05, 1.05])
+    ax1.legend(loc="lower right")
+    ax1.set_title('Calibration plots  (reliability curve)')
+
+    ax2.set_xlabel("Mean predicted value")
+    ax2.set_ylabel("Count")
+    ax2.legend(loc="upper center", ncol=2)
+
+    plt.tight_layout()
+
+# Plot calibration curve for Gaussian Naive Bayes
+plot_calibration_curve(est=GaussianNB(), name="Naive Bayes", fig_index=1)
+
+# Plot calibration curve for Linear SVC
+plot_calibration_curve(LinearSVC(max_iter=10000), "SVC", 2)
+
+plt.show()
+
+
+#%% Probability calibration
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import cm
+
+from sklearn.datasets import make_blobs
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import brier_score_loss
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import train_test_split
+
+
+n_samples = 50000
+n_bins = 3  # use 3 bins for calibration_curve as we have 3 clusters here
+
+# Generate 3 blobs with 2 classes where the second blob contains
+# half positive samples and half negative samples. Probability in this
+# blob is therefore 0.5.
+centers = [(-5, -5), (0, 0), (5, 5)]
+X, y = make_blobs(n_samples=n_samples, centers=centers, shuffle=False,
+                  random_state=42)
+
+y[:n_samples // 2] = 0
+y[n_samples // 2:] = 1
+sample_weight = np.random.RandomState(42).rand(y.shape[0])
+
+# split train, test for calibration
+X_train, X_test, y_train, y_test, sw_train, sw_test = \
+    train_test_split(X, y, sample_weight, test_size=0.9, random_state=42)
+
+# Gaussian Naive-Bayes with no calibration
+clf = GaussianNB()
+clf.fit(X_train, y_train)  # GaussianNB itself does not support sample-weights
+prob_pos_clf = clf.predict_proba(X_test)[:, 1]
+
+# Gaussian Naive-Bayes with isotonic calibration
+clf_isotonic = CalibratedClassifierCV(clf, cv=2, method='isotonic')
+clf_isotonic.fit(X_train, y_train, sw_train)
+prob_pos_isotonic = clf_isotonic.predict_proba(X_test)[:, 1]
+
+# Gaussian Naive-Bayes with sigmoid calibration
+clf_sigmoid = CalibratedClassifierCV(clf, cv=2, method='sigmoid')
+clf_sigmoid.fit(X_train, y_train, sw_train)
+prob_pos_sigmoid = clf_sigmoid.predict_proba(X_test)[:, 1]
+
+print("Brier scores: (the smaller the better)")
+
+clf_score = brier_score_loss(y_test, prob_pos_clf, sw_test)
+print("No calibration: %1.3f" % clf_score)
+
+clf_isotonic_score = brier_score_loss(y_test, prob_pos_isotonic, sw_test)
+print("With isotonic calibration: %1.3f" % clf_isotonic_score)
+
+clf_sigmoid_score = brier_score_loss(y_test, prob_pos_sigmoid, sw_test)
+print("With sigmoid calibration: %1.3f" % clf_sigmoid_score)
+
+# #############################################################################
+# Plot the data and the predicted probabilities
+plt.figure()
+y_unique = np.unique(y)
+colors = cm.rainbow(np.linspace(0.0, 1.0, y_unique.size))
+for this_y, color in zip(y_unique, colors):
+    this_X = X_train[y_train == this_y]
+    this_sw = sw_train[y_train == this_y]
+    plt.scatter(this_X[:, 0], this_X[:, 1], s=this_sw * 50,
+                c=color[np.newaxis, :],
+                alpha=0.5, edgecolor='k',
+                label="Class %s" % this_y)
+plt.legend(loc="best")
+plt.title("Data")
+
+plt.figure()
+order = np.lexsort((prob_pos_clf, ))
+plt.plot(prob_pos_clf[order], 'r', label='No calibration (%1.3f)' % clf_score)
+plt.plot(prob_pos_isotonic[order], 'g', linewidth=3,
+         label='Isotonic calibration (%1.3f)' % clf_isotonic_score)
+plt.plot(prob_pos_sigmoid[order], 'b', linewidth=3,
+         label='Sigmoid calibration (%1.3f)' % clf_sigmoid_score)
+plt.plot(np.linspace(0, y_test.size, 51)[1::2],
+         y_test[order].reshape(25, -1).mean(1),
+         'k', linewidth=3, label=r'Empirical')
+plt.ylim([-0.05, 1.05])
+plt.xlabel("Instances sorted according to predicted probability "
+           "(uncalibrated GNB)")
+plt.ylabel("P(y=1)")
+plt.legend(loc="upper left")
+plt.title("Gaussian naive Bayes probabilities")
+
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#%% Transform target in regression
+
+import numpy as np
+from sklearn.datasets import load_boston
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.preprocessing import QuantileTransformer
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+X, y = load_boston(return_X_y=True)
+transformer = QuantileTransformer(output_distribution='normal')
+regressor = LinearRegression()
+regr = TransformedTargetRegressor(regressor=regressor,
+                                  transformer=transformer)
+X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0)
+regr.fit(X_train, y_train)
+
+print('R2 score: {0:.2f}'.format(regr.score(X_test, y_test)))
+
+raw_target_regr = LinearRegression().fit(X_train, y_train)
+print('R2 score: {0:.2f}'.format(raw_target_regr.score(X_test, y_test)))
+
+
+# Tambien se pueden hacer transformaciones propias
+def func(x):
+    return np.log(x)
+def inverse_func(x):
+    return np.exp(x)
+
+regr = TransformedTargetRegressor(regressor=regressor,
+                                  func=func,
+                                  inverse_func=inverse_func)
+regr.fit(X_train, y_train)
+
+print('R2 score: {0:.2f}'.format(regr.score(X_test, y_test)))
+
+
+
+#%% Feature Union
+from sklearn.pipeline import Pipeline, FeatureUnion
+from sklearn.model_selection import GridSearchCV
+from sklearn.svm import SVC
+from sklearn.datasets import load_iris
+from sklearn.decomposition import PCA
+from sklearn.feature_selection import SelectKBest
+
+iris = load_iris()
+
+X, y = iris.data, iris.target
+
+# This dataset is way too high-dimensional. Better do PCA:
+pca = PCA(n_components=2)
+
+# Maybe some original features where good, too?
+selection = SelectKBest(k=1)
+
+# Build estimator from PCA and Univariate selection:
+
+combined_features = FeatureUnion([("pca", pca), ("univ_select", selection)])
+
+# Use combined features to transform dataset:
+X_features = combined_features.fit(X, y).transform(X)
+print("Combined space has", X_features.shape[1], "features")
+
+svm = SVC(kernel="linear")
+
+# Do grid search over k, n_components and C:
+
+pipeline = Pipeline([("features", combined_features), ("svm", svm)])
+
+param_grid = dict(features__pca__n_components=[1, 2, 3],
+                  features__univ_select__k=[1, 2],
+                  svm__C=[0.1, 1, 10])
+
+grid_search = GridSearchCV(pipeline, param_grid=param_grid, verbose=10)
+grid_search.fit(X, y)
+print(grid_search.best_estimator_)
+
+
+#%% Column Transformer
+
+import pandas as pd
+X = pd.DataFrame(
+    {'city': ['London', 'London', 'Paris', 'Sallisaw'],
+     'title': ["His Last Bow", "How Watson Learned the Trick",
+               "A Moveable Feast", "The Grapes of Wrath"],
+     'expert_rating': [5, 3, 4, 5],
+     'user_rating': [4, 5, 4, 3]})
+
+from sklearn.compose import make_column_transformer
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import MinMaxScaler
+column_trans = make_column_transformer(
+    (OneHotEncoder(), ['city']),
+    (CountVectorizer(), 'title'),
+    remainder='drop')
+X_new = column_trans.fit_transform(X)
+
+X_new
+
+#Otro ejemplo
+
+import numpy as np
+import pandas as pd
+
+from sklearn.compose import ColumnTransformer
+from sklearn.datasets import fetch_openml
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+
+# Load data from https://www.openml.org/d/40945
+X, y = fetch_openml("titanic", version=1, as_frame=True, return_X_y=True)
+
+numeric_features = ['age', 'fare']
+categorical_features = ['embarked', 'sex', 'pclass']
+
+cnts_pipeline = Pipeline([
+    ('impute', SimpleImputer(strategy='mean')),
+    ('scale', StandardScaler())
+])
+categ_pipeline = Pipeline([
+    ('impute', SimpleImputer(strategy='most_frequent')),
+    ('onehot', OneHotEncoder(handle_unknown='ignore'))
+])
+
+preprocess_pipeline = ColumnTransformer([
+    ('continuous', cnts_pipeline, numeric_features),
+    ('cat', categ_pipeline, categorical_features)
+    ])  ##remainder is used to get all the columns irrespective of transormation happened or not
+
+
+#Recuperar los nombres
+def get_transformer_feature_names(columnTransformer):
+
+    output_features = []
+
+    for name, pipe, features in columnTransformer.transformers_:
+        if name!='remainder':
+            for i in pipe:
+                trans_features = []
+                if hasattr(i,'categories_'):
+                    trans_features.extend(i.get_feature_names(features))
+                else:
+                    trans_features = features
+            output_features.extend(trans_features)
+
+    return output_features
+
+
+X_train_processed = pd.DataFrame(preprocess_pipeline.fit_transform(X), 
+             columns=get_transformer_feature_names(preprocess_pipeline))
+
+#PAra aplicar una transformation propia
+from sklearn.preprocessing import FunctionTransformer
+import numpy as np
+import pandas as pd
+
+from sklearn.compose import ColumnTransformer
+from sklearn.datasets import fetch_openml
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+
+# Load data from https://www.openml.org/d/40945
+X, y = fetch_openml("titanic", version=1, as_frame=True, return_X_y=True)
+
+numeric_features = ['age', 'fare']
+
+def funcion():
+    return np.log1p
+
+cnts_pipeline = Pipeline([
+    ('impute', SimpleImputer(strategy='mean')),
+    ('log', FunctionTransformer(np.log1p))
+     
+])
+
+preprocess_pipeline = ColumnTransformer([
+    ('continuous', cnts_pipeline, numeric_features)
+    ])
+
+X_train_processed = preprocess_pipeline.fit_transform(X)
+
+X_train_processed
+
+
+
+#%% LOADING DATA 
+#%% DictVectorizer
+measurements = [
+    {'city': 'Dubai', 'temperature': 33.},
+    {'city': 'London', 'temperature': 12.},
+    {'city': 'San Francisco', 'temperature': 18.},
+]
+
+from sklearn.feature_extraction import DictVectorizer
+vec = DictVectorizer()
+vec.fit_transform(measurements).toarray()
+vec.get_feature_names()
+
+
+#%% Count Vectorizer
+from sklearn.feature_extraction.text import CountVectorizer
+vectorizer = CountVectorizer()
+corpus = [
+    'This is the first document.',
+    'This is the second second document.',
+    'And the third one.',
+    'Is this the first document?',
+]
+X = vectorizer.fit_transform(corpus)
+X.toarray()
+
+
+#%% Image feature extraction
+import numpy as np
+from sklearn.feature_extraction import image
+
+one_image = np.arange(4 * 4 * 3).reshape((4, 4, 3))
+one_image[:, :, 0]  # R channel of a fake RGB picture
+
+patches = image.extract_patches_2d(one_image, (2, 2), max_patches=2,
+    random_state=0)
+patches.shape
+
+patches[:, :, :, 0]
+
+patches = image.extract_patches_2d(one_image, (2, 2))
+patches.shape
+
+patches[4, :, :, 0]
+
+#Reconstruir la imagen
+reconstructed = image.reconstruct_from_patches_2d(patches, (4, 4, 3))
+np.testing.assert_array_equal(one_image, reconstructed)
+
+
+#Y para varias imagenes, 
+five_images = np.arange(5 * 4 * 4 * 3).reshape(5, 4, 4, 3)
+patches = image.PatchExtractor((2, 2)).transform(five_images)
+patches.shape
+
+
+#%%IMPUTE DATA
+ #SimpleImputer
+import numpy as np
+from sklearn.impute import SimpleImputer
+
+X = [[-1, 2], [6, -1], [7, 6]] #-1 en vez de np.nan
+imp = SimpleImputer(missing_values=-1, strategy='mean').fit(X)
+
+print(imp.transform(X))
+
+import pandas as pd
+df = pd.DataFrame([["a", "x"],
+                   [np.nan, "y"],
+                   ["a", np.nan],
+                   ["b", "y"]], dtype="category")
+
+imp = SimpleImputer(strategy="most_frequent")
+print(imp.fit_transform(df))
+
+#%%Iterative Imputer, usa valores de otras columnas
+import numpy as np
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
+imp = IterativeImputer(max_iter=10, random_state=0)
+imp.fit([[1, 2], [3, 6], [4, 8], [np.nan, 3], [7, np.nan]])
+
+X_test = [[np.nan, 2], [6, np.nan], [np.nan, 6]]
+# the model learns that the second feature is double the first
+print(np.round(imp.transform(X_test)))
+
+
+
+#%% KNN imputer
+import numpy as np
+from sklearn.impute import KNNImputer
+nan = np.nan
+X = [[1, 2, nan], [3, 4, 3], [nan, 6, 5], [8, 8, 7]]
+imputer = KNNImputer(n_neighbors=2, weights="uniform")
+imputer.fit_transform(X)
+
+
+#%% Save and Load models
+from sklearn import svm
+from sklearn import datasets
+clf = svm.SVC()
+X, y= datasets.load_iris(return_X_y=True)
+clf.fit(X, y)
+
+from joblib import dump, load
+dump(clf, 'filename.joblib') 
+
+clf = load('filename.joblib') 
